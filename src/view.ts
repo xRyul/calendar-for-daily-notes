@@ -16,6 +16,10 @@ import type { ISettings } from "src/settings";
 
 import Calendar from "./ui/Calendar.svelte";
 import { showFileMenu } from "./ui/fileMenu";
+
+type CalendarComponent = InstanceType<typeof Calendar> & {
+  requestListRefresh?: () => void;
+};
 import { activeFile, dailyNotes, weeklyNotes, settings } from "./ui/stores";
 import {
   customTagsSource,
@@ -25,7 +29,7 @@ import {
 } from "./ui/sources";
 
 export default class CalendarView extends ItemView {
-  private calendar: Calendar;
+  private calendar: CalendarComponent;
   private settings: ISettings;
 
   constructor(leaf: WorkspaceLeaf) {
@@ -194,9 +198,20 @@ export default class CalendarView extends ItemView {
   }
 
   private async onFileModified(file: TFile): Promise<void> {
-    const date = getDateFromFile(file, "day") || getDateFromFile(file, "week");
+    const dailyDate = getDateFromFile(file, "day");
+    const date = dailyDate || getDateFromFile(file, "week");
+
     if (date && this.calendar) {
       this.calendar.tick();
+    }
+
+    // List view filtering depends on file contents (word count), so refresh it
+    // when a daily note changes.
+    if (dailyDate && this.calendar) {
+      const refreshList = this.calendar.requestListRefresh;
+      if (typeof refreshList === "function") {
+        refreshList();
+      }
     }
   }
 
@@ -306,7 +321,7 @@ export default class CalendarView extends ItemView {
     const leaf = inNewSplit
       ? workspace.splitActiveLeaf()
       : workspace.getUnpinnedLeaf();
-    await leaf.openFile(existingFile, { active : true, mode });
+    await leaf.openFile(existingFile, { active: true, state: { mode } });
 
     activeFile.setFile(existingFile);
   }

@@ -9,3 +9,99 @@
 .settings-banner h4 {
   margin: 0;
 }
+
+/* Calendar view tabs + List view */
+.calendar-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+}
+
+.calendar-tab-bar {
+  display: flex;
+  gap: 6px;
+  padding: 6px 0;
+  margin: 0 0 6px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+
+  /* Some calendar themes/libraries use positioned containers that can overlap.
+     Keep tabs above and clickable. */
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--background-primary);
+}
+
+.calendar-tab {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.calendar-tab.is-active {
+  background: var(--background-secondary);
+  border-color: var(--background-modifier-border);
+  color: var(--text-normal);
+}
+
+.calendar-pane.is-hidden {
+  display: none;
+}
+
+.calendar-list-view {
+  overflow: auto;
+  padding: 6px 0;
+  position: relative;
+  z-index: 1;
+}
+
+.calendar-list-status,
+.calendar-list-empty {
+  color: var(--text-muted);
+  padding: 6px 0;
+}
+
+.calendar-list-error {
+  color: var(--text-error);
+  padding: 6px 0;
+}
+
+.calendar-list-year > summary {
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 0;
+  color: var(--text-normal);
+  font-weight: 600;
+}
+
+.calendar-list-days {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 10px 12px;
+}
+
+.calendar-list-day {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 2px 0;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.calendar-list-day:hover {
+  color: var(--text-normal);
+  text-decoration: underline;
+}
+
+.calendar-list-day.is-active {
+  color: var(--text-normal);
+  font-weight: 600;
+}
