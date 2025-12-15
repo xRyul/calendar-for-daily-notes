@@ -1,11 +1,15 @@
 import type { Moment, WeekSpec } from "moment";
 import { App, Plugin, WorkspaceLeaf } from "obsidian";
 
+import type { OllamaTitleCache } from "src/ollama/cache";
+import { pruneOllamaTitleCache, sanitizeOllamaTitleCache } from "src/ollama/cache";
+
 import { VIEW_TYPE_CALENDAR } from "./constants";
-import { settings } from "./ui/stores";
+import { ollamaTitleCache, settings } from "./ui/stores";
 import {
   appHasPeriodicNotesPluginLoaded,
   CalendarSettingsTab,
+  defaultSettings,
   ISettings,
 } from "./settings";
 import CalendarView from "./view";
@@ -18,20 +22,49 @@ declare global {
   }
 }
 
+type PluginDataV2 = {
+  settings: ISettings;
+  ollamaTitleCache: OllamaTitleCache;
+};
+
 export default class CalendarPlugin extends Plugin {
   public options: ISettings;
   private view: CalendarView;
 
+  private isLoadingData = false;
+  private saveDataTimer: number | null = null;
+  private data: PluginDataV2 = {
+    settings: { ...defaultSettings } as ISettings,
+    ollamaTitleCache: {},
+  };
+
   onunload(): void {
+    if (this.saveDataTimer !== null) {
+      window.clearTimeout(this.saveDataTimer);
+      this.saveDataTimer = null;
+    }
+
     this.app.workspace
       .getLeavesOfType(VIEW_TYPE_CALENDAR)
       .forEach((leaf) => leaf.detach());
   }
 
   async onload(): Promise<void> {
+    this.isLoadingData = true;
+
     this.register(
       settings.subscribe((value) => {
         this.options = value;
+        this.data = { ...this.data, settings: value };
+      })
+    );
+
+    this.register(
+      ollamaTitleCache.subscribe((cache) => {
+        this.data = { ...this.data, ollamaTitleCache: cache };
+        if (!this.isLoadingData) {
+          this.scheduleSaveData();
+        }
       })
     );
 
@@ -90,22 +123,82 @@ export default class CalendarPlugin extends Plugin {
     });
   }
 
-  async loadOptions(): Promise<void> {
-    const options = await this.loadData();
-    settings.update((old) => {
-      return {
-        ...old,
-        ...(options || {}),
-      };
-    });
+  private scheduleSaveData(): void {
+    if (this.saveDataTimer !== null) {
+      window.clearTimeout(this.saveDataTimer);
+    }
+    this.saveDataTimer = window.setTimeout(() => {
+      this.saveDataTimer = null;
+      void this.savePluginData();
+    }, 500);
+  }
 
-    await this.saveData(this.options);
+  private async savePluginData(): Promise<void> {
+    const maxEntries = this.options?.ollamaTitleCacheMaxEntries;
+    const prunedCache = pruneOllamaTitleCache(
+      this.data.ollamaTitleCache,
+      maxEntries
+    );
+
+    // Keep the in-memory store aligned with what we persist.
+    if (prunedCache !== this.data.ollamaTitleCache) {
+      this.data = { ...this.data, ollamaTitleCache: prunedCache };
+      ollamaTitleCache.set(prunedCache);
+    }
+
+    await this.saveData({
+      settings: this.options,
+      ollamaTitleCache: prunedCache,
+    } as PluginDataV2);
+  }
+
+  public async clearGeneratedTitles(): Promise<void> {
+    ollamaTitleCache.set({});
+    await this.savePluginData();
+  }
+
+  async loadOptions(): Promise<void> {
+    const raw = await this.loadData();
+
+    const isV2 =
+      !!raw &&
+      typeof raw === "object" &&
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      typeof (raw as any).settings === "object";
+
+    // Legacy data was just the settings object.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const settingsData = (isV2 ? (raw as any).settings : raw) as
+      | Partial<ISettings>
+      | null
+      | undefined;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cacheData = isV2 ? (raw as any).ollamaTitleCache : undefined;
+
+    const mergedSettings = {
+      ...defaultSettings,
+      ...(settingsData || {}),
+    } as ISettings;
+
+    settings.set(mergedSettings);
+
+    const sanitizedCache = pruneOllamaTitleCache(
+      sanitizeOllamaTitleCache(cacheData),
+      mergedSettings.ollamaTitleCacheMaxEntries
+    );
+    ollamaTitleCache.set(sanitizedCache);
+
+    this.isLoadingData = false;
+
+    // Write back immediately to migrate legacy data shape.
+    await this.savePluginData();
   }
 
   async writeOptions(
     changeOpts: (settings: ISettings) => Partial<ISettings>
   ): Promise<void> {
     settings.update((old) => ({ ...old, ...changeOpts(old) }));
-    await this.saveData(this.options);
+    await this.savePluginData();
   }
 }

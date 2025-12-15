@@ -5,6 +5,7 @@ import {
 } from "obsidian-daily-notes-interface";
 import { writable } from "svelte/store";
 
+import type { OllamaTitleCache } from "src/ollama/cache";
 import { defaultSettings, ISettings } from "src/settings";
 
 import { getDateUIDFromFile } from "./utils";
@@ -56,6 +57,8 @@ function createWeeklyNotesStore() {
 export const settings = writable<ISettings>(defaultSettings);
 export const dailyNotes = createDailyNotesStore();
 export const weeklyNotes = createWeeklyNotesStore();
+
+export const ollamaTitleCache = writable<OllamaTitleCache>({});
 
 function createSelectedFileStore() {
   const store = writable<string>(null);

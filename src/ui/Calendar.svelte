@@ -9,13 +9,30 @@
   import type { ICalendarSource } from "obsidian-calendar-ui";
   import { onDestroy, onMount } from "svelte";
   import { slide } from "svelte/transition";
+  import { Notice } from "obsidian";
   import type { TFile } from "obsidian";
   import { getDateFromFile, getDateUID } from "obsidian-daily-notes-interface";
 
   import { DEFAULT_WORDS_PER_DOT } from "src/constants";
+  import { createOllamaClient, safeParseJson } from "src/ollama/client";
+  import type { OllamaGenerateResponse } from "src/ollama/client";
+  import { upsertOllamaTitleCacheEntry } from "src/ollama/cache";
+  import {
+    buildDailyTitlePrompt,
+    DAILY_TITLE_SCHEMA,
+    formatDailyTitleLabel,
+    parseDailyTitleParts,
+    prepareNoteTextForOllama,
+  } from "src/ollama/title";
 
   import type { ISettings } from "src/settings";
-  import { activeFile, dailyNotes, settings, weeklyNotes } from "./stores";
+  import {
+    activeFile,
+    dailyNotes,
+    ollamaTitleCache,
+    settings,
+    weeklyNotes,
+  } from "./stores";
   import { getWordCount } from "./utils";
 
   let today: Moment;
@@ -36,9 +53,34 @@
 
   let calendarBaseWrapperEl: HTMLDivElement | null = null;
   let listToggleButtonEl: HTMLButtonElement | null = null;
-  let listToggleTop = 0;
-  let listToggleLeft = 0;
   let listTogglePositioned = false;
+
+  // Responsive scaling: when the view gets narrow, scale down the calendar (and header)
+  // so we can still show all 7 day columns without horizontal scroll.
+  // Tuned for the Obsidian right sidebar: ~273px is the minimum before the pane collapses.
+  const CALENDAR_SCALE_FULL_WIDTH_PX = 398;
+  const CALENDAR_SCALE_MIN_WIDTH_PX = 273;
+  const CALENDAR_SCALE_MIN = CALENDAR_SCALE_MIN_WIDTH_PX / CALENDAR_SCALE_FULL_WIDTH_PX;
+
+  function updateCalendarScale(): void {
+    if (!calendarBaseWrapperEl) {
+      return;
+    }
+
+    const width = calendarBaseWrapperEl.getBoundingClientRect().width;
+    if (!Number.isFinite(width) || width <= 0) {
+      return;
+    }
+
+    const raw = width / CALENDAR_SCALE_FULL_WIDTH_PX;
+    const scale = width < CALENDAR_SCALE_FULL_WIDTH_PX
+      ? Math.max(CALENDAR_SCALE_MIN, Math.min(1, raw))
+      : 1;
+
+    // Round a little to avoid thrashing on sub-pixel changes.
+    const rounded = Math.round(scale * 1000) / 1000;
+    calendarBaseWrapperEl.style.setProperty("--calendar-scale", String(rounded));
+  }
 
   type ListItem = {
     date: Moment;
@@ -46,6 +88,10 @@
     dateStr: string;
     epoch: number;
     year: number;
+
+    file: TFile;
+    filePath: string;
+    mtime: number;
   };
   type YearGroup = { year: number; items: ListItem[] };
 
@@ -57,6 +103,7 @@
   let yearOpenState: Record<number, boolean> = {};
 
   const wordCountCache = new Map<string, { mtime: number; wordCount: number }>();
+  let titleInFlight: Record<string, boolean> = {};
 
   let listComputeNonce = 0;
   // Obsidian runs in an Electron (DOM) environment; window.setTimeout returns a numeric ID.
@@ -105,6 +152,113 @@
     return wordCount;
   }
 
+  function getCachedOllamaTitle(item: ListItem): string | null {
+    const enabled = !!$settings.ollamaTitlesEnabled;
+    if (!enabled) {
+      return null;
+    }
+
+    const entry = $ollamaTitleCache?.[item.filePath];
+    if (entry && entry.mtime === item.mtime && entry.title) {
+      return entry.title;
+    }
+
+    return null;
+  }
+
+  async function onClickGenerateTitle(item: ListItem, event: MouseEvent): Promise<void> {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!$settings.ollamaTitlesEnabled) {
+      return;
+    }
+
+    const key = item.filePath;
+    if (titleInFlight[key]) {
+      return;
+    }
+
+    titleInFlight = { ...titleInFlight, [key]: true };
+
+    try {
+      const baseUrl = $settings.ollamaBaseUrl ?? "http://127.0.0.1:11434";
+      const model = $settings.ollamaModel ?? "gemma3:4b";
+      const maxChars = $settings.ollamaMaxChars ?? 8000;
+      const timeoutMs = $settings.ollamaRequestTimeoutMs ?? 15000;
+      const maxEntries = $settings.ollamaTitleCacheMaxEntries ?? 1000;
+
+      const noteTextRaw = await window.app.vault.cachedRead(item.file);
+      const noteText = prepareNoteTextForOllama(noteTextRaw, maxChars);
+      const prompt = buildDailyTitlePrompt({
+        dateStr: item.dateStr,
+        noteText,
+      });
+
+      const client = createOllamaClient({ baseUrl, timeoutMs });
+
+      let res: OllamaGenerateResponse;
+      try {
+        res = await client.generate(
+          {
+            model,
+            prompt,
+            format: DAILY_TITLE_SCHEMA,
+            options: {
+              temperature: 0.2,
+              num_predict: 120,
+            },
+          },
+          { timeoutMs }
+        );
+      } catch (_err) {
+        // Some Ollama versions don’t support JSON Schema format; retry with plain JSON.
+        res = await client.generate(
+          {
+            model,
+            prompt,
+            format: "json",
+            options: {
+              temperature: 0.2,
+              num_predict: 120,
+            },
+          },
+          { timeoutMs }
+        );
+      }
+
+      if (res?.error) {
+        throw new Error(res.error);
+      }
+
+      const parsed = safeParseJson(res?.response ?? "");
+      const parts = parseDailyTitleParts(parsed);
+      if (!parts) {
+        throw new Error("Model output was not valid JSON for a title.");
+      }
+
+      const title = formatDailyTitleLabel(item.dateStr, parts);
+
+      ollamaTitleCache.update((cache) => {
+        return upsertOllamaTitleCacheEntry({
+          cache,
+          filePath: item.filePath,
+          entry: {
+            mtime: item.mtime,
+            title,
+          },
+          maxEntries,
+        });
+      });
+    } catch (err) {
+      console.error("[Calendar] Failed to generate title", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      new Notice(`Ollama title generation failed: ${msg}`);
+    } finally {
+      titleInFlight = { ...titleInFlight, [key]: false };
+    }
+  }
+
   async function computeList(): Promise<void> {
     const nonce = ++listComputeNonce;
     listLoading = true;
@@ -142,6 +296,10 @@
               dateStr: date.format("YYYY-MM-DD"),
               epoch: date.valueOf(),
               year: date.year(),
+
+              file,
+              filePath: file.path,
+              mtime: file.stat?.mtime ?? 0,
             } as ListItem;
           })
         );
@@ -265,37 +423,28 @@
     const rightNavEl = calendarBaseWrapperEl.querySelector(
       "#calendar-container .nav .right-nav"
     ) as HTMLElement | null;
-    const titleEl = calendarBaseWrapperEl.querySelector(
-      "#calendar-container .nav .title"
-    ) as HTMLElement | null;
 
-    if (!navEl || !rightNavEl || !titleEl) {
+    if (!navEl || !rightNavEl) {
+      listTogglePositioned = false;
       return;
     }
 
-    const wrapperRect = calendarBaseWrapperEl.getBoundingClientRect();
-    const navRect = navEl.getBoundingClientRect();
-    const rightNavRect = rightNavEl.getBoundingClientRect();
-    const titleRect = titleEl.getBoundingClientRect();
-    const btnRect = listToggleButtonEl.getBoundingClientRect();
+    // Put the toggle into the header DOM flow so layout stays robust at tiny widths.
+    // This avoids overlaps (title vs toggle vs arrows) and lets CSS handle truncation/scroll.
+    if (listToggleButtonEl.parentElement !== navEl) {
+      navEl.insertBefore(listToggleButtonEl, rightNavEl);
+    }
 
-    // Place the toggle between the month/year title and the right-nav group.
-    const gap = 6;
-    const minLeft = titleRect.right - wrapperRect.left + gap;
-    const preferredLeft = rightNavRect.left - wrapperRect.left - btnRect.width - gap;
-
-    const left = Math.max(minLeft, preferredLeft);
-    const top = navRect.top - wrapperRect.top + (navRect.height - btnRect.height) / 2;
-
-    listToggleLeft = Math.round(left);
-    listToggleTop = Math.round(top);
     listTogglePositioned = true;
   }
 
   onMount(() => {
     const schedule = () => {
       // CalendarBase mounts inside this component; wait a frame so its DOM is ready.
-      window.requestAnimationFrame(updateListTogglePosition);
+      window.requestAnimationFrame(() => {
+        updateCalendarScale();
+        updateListTogglePosition();
+      });
     };
 
     schedule();
@@ -367,9 +516,6 @@
         type="button"
         aria-label={showList ? "Hide list" : "Show list"}
         aria-pressed={showList}
-        style={listTogglePositioned
-          ? `top:${listToggleTop}px;left:${listToggleLeft}px;`
-          : ""}
         bind:this={listToggleButtonEl}
         on:click={toggleList}
       >
@@ -412,14 +558,32 @@
 
           <div class="calendar-list-days">
             {#each group.items as item (item.dateUID)}
-              <button
-                class="calendar-list-day"
-                class:is-active={item.dateUID === $activeFile}
-                type="button"
-                on:click={(e) => onClickListDay(item.date, e)}
-              >
-                {item.dateStr}
-              </button>
+              <div class="calendar-list-row">
+                <button
+                  class="calendar-list-day"
+                  class:is-active={item.dateUID === $activeFile}
+                  type="button"
+                  on:click={(e) => onClickListDay(item.date, e)}
+                >
+                  <span class="calendar-list-day-label">
+                    {getCachedOllamaTitle(item) ?? item.dateStr}
+                  </span>
+                </button>
+
+                {#if $settings.ollamaTitlesEnabled}
+                  <button
+                    class="calendar-list-generate"
+                    class:is-loading={titleInFlight[item.filePath]}
+                    type="button"
+                    aria-label="Generate title"
+                    title="Generate title"
+                    disabled={titleInFlight[item.filePath]}
+                    on:click={(e) => onClickGenerateTitle(item, e)}
+                  >
+                    {titleInFlight[item.filePath] ? "…" : "Gen"}
+                  </button>
+                {/if}
+              </div>
             {/each}
           </div>
         </details>

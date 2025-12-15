@@ -18,25 +18,52 @@
   position: relative;
 }
 
+/* Keep the calendar header in a single line on narrow panes */
+.calendar-view #calendar-container .nav {
+  flex-wrap: nowrap;
+}
+
+.calendar-view #calendar-container .nav .title {
+  /* Prevent month/year wrapping into multiple rows */
+  white-space: nowrap;
+  flex-wrap: nowrap;
+
+  /* Allow the title to shrink instead of wrapping/pushing controls */
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-view #calendar-container .nav .right-nav {
+  white-space: nowrap;
+  flex-wrap: nowrap;
+}
+
 .calendar-view .calendar-base-wrapper {
   position: relative;
+
+  /* When the pane gets extremely narrow, scroll instead of clipping columns (e.g. Sunday) */
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.calendar-view #calendar-container {
+  /* Give the calendar a sane minimum so 7 columns don't get clipped with no scroll affordance */
+  min-width: 240px;
 }
 
 .calendar-view .calendar-list-toggle {
-  position: absolute;
-  z-index: 20;
+  /* Hidden until we move it into the header DOM (prevents a layout jump below the calendar) */
+  display: none;
 
-  /* Prevent a visible flash at (0,0) before we compute a position */
-  opacity: 0;
-  pointer-events: none;
-
-  display: flex;
   align-items: center;
   justify-content: center;
 
   width: 26px;
   height: 26px;
   padding: 0;
+  margin: 0 6px;
 
   appearance: none;
   border: none;
@@ -48,14 +75,12 @@
   border-radius: 6px;
 
   transition:
-    opacity 120ms ease,
     background-color 120ms ease,
     color 120ms ease;
 }
 
 .calendar-view .calendar-list-toggle.is-positioned {
-  opacity: 1;
-  pointer-events: auto;
+  display: flex;
 }
 
 .calendar-view .calendar-list-toggle:hover {
@@ -195,6 +220,12 @@
   align-items: stretch;
 }
 
+.calendar-view .calendar-list-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .calendar-view .calendar-list-day {
   appearance: none;
   background: transparent;
@@ -213,6 +244,44 @@
   border-radius: 6px;
 
   transition: background-color 120ms ease, color 120ms ease;
+
+  /* Allow label truncation */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.calendar-view .calendar-list-day-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-view .calendar-list-generate {
+  appearance: none;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+
+  color: var(--text-muted);
+  cursor: pointer;
+
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+
+.calendar-view .calendar-list-generate:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.calendar-view .calendar-list-generate:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .calendar-view .calendar-list-day:hover {

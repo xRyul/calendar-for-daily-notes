@@ -14,6 +14,13 @@ export function getDefaultSettings(
       weeklyNoteFormat: "",
       weeklyNoteTemplate: "",
       localeOverride: "system-default",
+
+      ollamaTitlesEnabled: false,
+      ollamaBaseUrl: "http://127.0.0.1:11434",
+      ollamaModel: "gemma3:4b",
+      ollamaMaxChars: 8000,
+      ollamaRequestTimeoutMs: 15000,
+      ollamaTitleCacheMaxEntries: 1000,
     },
     overrides
   );
