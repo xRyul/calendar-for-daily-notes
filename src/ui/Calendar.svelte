@@ -10,7 +10,7 @@
   import { onDestroy, onMount } from "svelte";
   import { slide } from "svelte/transition";
   import { Notice } from "obsidian";
-  import type { TFile } from "obsidian";
+  import type { EventRef, TFile } from "obsidian";
   import { getDateFromFile, getDateUID } from "obsidian-daily-notes-interface";
 
   import { DEFAULT_WORDS_PER_DOT } from "src/constants";
@@ -90,7 +90,7 @@
     epoch: number;
     year: number;
 
-    file: TFile;
+    file?: TFile;
     filePath: string;
     mtime: number;
   };
@@ -102,6 +102,22 @@
 
   // Track open/closed state for each year, so user toggles persist across refreshes.
   let yearOpenState: Record<number, boolean> = {};
+
+  // Track open/closed state for each day (nested under year).
+  let dayOpenState: Record<string, boolean> = {};
+
+  type DayChildKey = "notes" | "files";
+  type DayChildOpenState = { notes: boolean; files: boolean };
+  let dayChildOpenState: Record<string, DayChildOpenState> = {};
+
+  type CreatedOnDayBucket = { notes: TFile[]; files: TFile[] };
+  let createdOnDayIndex: Record<string, CreatedOnDayBucket> = {};
+  let createdOnDayIndexLoading = false;
+  let createdOnDayIndexError: string | null = null;
+
+  let createdOnDayIndexNonce = 0;
+  let createdOnDayIndexTimer: number | null = null;
+  const CREATED_ON_DAY_RECOMPUTE_DEBOUNCE_MS = 1200;
 
   const wordCountCache = new Map<string, { mtime: number; wordCount: number }>();
   let titleInFlight: Record<string, boolean> = {};
@@ -117,6 +133,7 @@
     if (showList) {
       showListJustOpened = true;
       void computeList();
+      void rebuildCreatedOnDayIndex();
     }
   }
 
@@ -136,6 +153,121 @@
 
   export function requestListRefresh(): void {
     scheduleListRecompute();
+  }
+
+  function isNoteLikeFile(file: TFile): boolean {
+    const ext = (file.extension ?? "").toLowerCase();
+    return ext === "md" || ext === "canvas";
+  }
+
+  function shouldIndexFile(file: TFile): boolean {
+    const p = file.path ?? "";
+
+    // Avoid noise from Obsidian config, trash, etc.
+    if (p.startsWith(".obsidian/")) {
+      return false;
+    }
+    if (p.startsWith(".trash/")) {
+      return false;
+    }
+
+    return true;
+  }
+
+  async function rebuildCreatedOnDayIndex(): Promise<void> {
+    const nonce = ++createdOnDayIndexNonce;
+    createdOnDayIndexLoading = true;
+    createdOnDayIndexError = null;
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const app = (window as any).app;
+      const vault = app?.vault;
+      if (!vault?.getFiles) {
+        createdOnDayIndex = {};
+        return;
+      }
+
+      const files = (vault.getFiles() ?? []) as TFile[];
+      const next: Record<string, CreatedOnDayBucket> = {};
+
+      const chunkSize = 2000;
+      for (let i = 0; i < files.length; i += chunkSize) {
+        if (nonce !== createdOnDayIndexNonce) {
+          return;
+        }
+
+        const chunk = files.slice(i, i + chunkSize);
+        for (const file of chunk) {
+          if (!shouldIndexFile(file)) {
+            continue;
+          }
+
+          const ctime = file.stat?.ctime;
+          if (!ctime) {
+            continue;
+          }
+
+          const dateStr = window.moment(ctime).format("YYYY-MM-DD");
+          const bucket = next[dateStr] ?? (next[dateStr] = { notes: [], files: [] });
+
+          if (isNoteLikeFile(file)) {
+            bucket.notes.push(file);
+          } else {
+            bucket.files.push(file);
+          }
+        }
+
+        // Yield occasionally to keep the UI responsive on large vaults.
+        await new Promise<void>((resolve) => {
+          if (typeof window.requestAnimationFrame === "function") {
+            window.requestAnimationFrame(() => resolve());
+          } else {
+            window.setTimeout(() => resolve(), 0);
+          }
+        });
+      }
+
+      for (const bucket of Object.values(next)) {
+        bucket.notes.sort((a, b) => a.path.localeCompare(b.path));
+        bucket.files.sort((a, b) => a.path.localeCompare(b.path));
+      }
+
+      if (nonce !== createdOnDayIndexNonce) {
+        return;
+      }
+
+      createdOnDayIndex = next;
+      // Updating index may require list recompute to surface days without daily notes
+      scheduleListRecompute();
+    } catch (err) {
+      console.error("[Calendar] Failed to build created-on-day index", err);
+      if (nonce !== createdOnDayIndexNonce) {
+        return;
+      }
+
+      createdOnDayIndexError = err instanceof Error ? err.message : String(err);
+      createdOnDayIndex = {};
+    } finally {
+      if (nonce === createdOnDayIndexNonce) {
+        createdOnDayIndexLoading = false;
+      }
+    }
+  }
+
+  function scheduleCreatedOnDayIndexRebuild(): void {
+    if (!showList) {
+      return;
+    }
+
+    if (createdOnDayIndexTimer !== null) {
+      window.clearTimeout(createdOnDayIndexTimer);
+    }
+
+    createdOnDayIndexTimer = window.setTimeout(() => {
+      createdOnDayIndexTimer = null;
+      void rebuildCreatedOnDayIndex();
+    }, CREATED_ON_DAY_RECOMPUTE_DEBOUNCE_MS);
   }
 
   async function getCachedWordCount(file: TFile): Promise<number> {
@@ -158,7 +290,7 @@
     enabled: boolean,
     cache: OllamaTitleCache | null | undefined
   ): string | null {
-    if (!enabled) {
+    if (!enabled || !item.filePath) {
       return null;
     }
 
@@ -192,6 +324,7 @@
       const timeoutMs = $settings.ollamaRequestTimeoutMs ?? 15000;
       const maxEntries = $settings.ollamaTitleCacheMaxEntries ?? 1000;
 
+      if (!item.file) { return; }
       const noteTextRaw = await window.app.vault.cachedRead(item.file);
       const noteText = prepareNoteTextForOllama(noteTextRaw, maxChars);
       const prompt = buildDailyTitlePrompt({
@@ -321,6 +454,29 @@
 
       items.sort((a, b) => b.epoch - a.epoch);
 
+      // Ensure days with created notes/files appear even without a qualifying daily note
+      if (createdOnDayIndex && typeof createdOnDayIndex === "object") {
+        for (const dateStr of Object.keys(createdOnDayIndex)) {
+          const exists = items.some((it) => it.dateStr === dateStr);
+          if (!exists) {
+            const date = window.moment(dateStr, "YYYY-MM-DD");
+            if (date?.isValid?.()) {
+              items.push({
+                date,
+                dateUID: getDateUID(date, "day"),
+                dateStr,
+                epoch: date.valueOf(),
+                year: date.year(),
+                filePath: "",
+                mtime: 0,
+              } as ListItem);
+            }
+          }
+        }
+      }
+
+      items.sort((a, b) => b.epoch - a.epoch);
+
       const yearToItems = new Map<number, ListItem[]>();
       for (const item of items) {
         const arr = yearToItems.get(item.year);
@@ -355,6 +511,39 @@
       }
 
       yearOpenState = nextOpenState;
+
+      // Maintain per-day open state (and sub-toggle open state) across refreshes.
+      const dayUIDSet = new Set(items.map((i) => i.dateUID));
+      const nextDayOpenState: Record<string, boolean> = { ...dayOpenState };
+      const nextDayChildOpenState: Record<string, DayChildOpenState> = {
+        ...dayChildOpenState,
+      };
+
+      for (const item of items) {
+        if (nextDayOpenState[item.dateUID] === undefined) {
+          nextDayOpenState[item.dateUID] = false;
+        }
+
+        const prevChild = nextDayChildOpenState[item.dateUID];
+        nextDayChildOpenState[item.dateUID] = prevChild
+          ? { notes: !!prevChild.notes, files: !!prevChild.files }
+          : { notes: false, files: false };
+      }
+
+      for (const key of Object.keys(nextDayOpenState)) {
+        if (!dayUIDSet.has(key)) {
+          delete nextDayOpenState[key];
+        }
+      }
+      for (const key of Object.keys(nextDayChildOpenState)) {
+        if (!dayUIDSet.has(key)) {
+          delete nextDayChildOpenState[key];
+        }
+      }
+
+      dayOpenState = nextDayOpenState;
+      dayChildOpenState = nextDayChildOpenState;
+
       listGroups = groups;
     } catch (err) {
       console.error("[Calendar] Failed to build list view", err);
@@ -375,7 +564,97 @@
     yearOpenState = { ...yearOpenState, [year]: el.open };
   }
 
+  function onToggleDay(dateUID: string, event: Event): void {
+    const el = event.currentTarget as HTMLDetailsElement;
+    dayOpenState = { ...dayOpenState, [dateUID]: el.open };
+  }
+
+  function onToggleDayChild(
+    dateUID: string,
+    child: DayChildKey,
+    event: Event
+  ): void {
+    const el = event.currentTarget as HTMLDetailsElement;
+    const prev = dayChildOpenState[dateUID] ?? { notes: false, files: false };
+    dayChildOpenState = {
+      ...dayChildOpenState,
+      [dateUID]: { ...prev, [child]: el.open },
+    };
+  }
+
+  function getCreatedNotesForItem(item: ListItem): TFile[] {
+    const bucket = createdOnDayIndex[item.dateStr];
+    if (!bucket?.notes?.length) {
+      return [];
+    }
+    return bucket.notes.filter((f) => f.path !== item.filePath);
+  }
+
+  function getCreatedFilesForItem(item: ListItem): TFile[] {
+    const bucket = createdOnDayIndex[item.dateStr];
+    return bucket?.files ?? [];
+  }
+
+  function hasDayChildren(item: ListItem): boolean {
+    const notes = getCreatedNotesForItem(item);
+    const files = getCreatedFilesForItem(item);
+    return (notes && notes.length > 0) || (files && files.length > 0);
+  }
+
+  /* removed: getParentFolderName, no longer used */
+  function getParentFolderName(file: TFile): string {
+    try {
+      const p = file.path ?? "";
+      const idx = p.lastIndexOf("/");
+      if (idx <= 0) return "";
+      const dir = p.slice(0, idx);
+      const didx = dir.lastIndexOf("/");
+      return didx >= 0 ? dir.slice(didx + 1) : dir;
+    } catch {
+      return "";
+    }
+  }
+
+  function getFileExtension(file: TFile): string {
+    const ext = (file.extension ?? "").toLowerCase();
+    return ext;
+  }
+
+  function onKeyOpenFile(file: TFile, event: KeyboardEvent): void {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      // Cast to MouseEvent-like for reuse
+      onClickOpenFile(file, (event as unknown) as MouseEvent);
+    }
+  }
+
+  async function onClickOpenFile(file: TFile, event: MouseEvent): Promise<void> {
+    event.preventDefault();
+    event.stopPropagation();
+
+    try {
+      const isMetaPressed = event.metaKey || event.ctrlKey;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const workspace = (window as any).app?.workspace;
+      if (!workspace) {
+        return;
+      }
+
+      const leaf = isMetaPressed
+        ? workspace.splitActiveLeaf()
+        : workspace.getUnpinnedLeaf();
+      await leaf.openFile(file, { active: true });
+      workspace.setActiveLeaf(leaf, true, true);
+    } catch (err) {
+      console.error("[Calendar] Failed to open file", err);
+    }
+  }
+
   function onClickListDay(date: Moment, event: MouseEvent): void {
+    // The day label remains a normal button; prevent <summary> from toggling when opening the note.
+    event.preventDefault();
+    event.stopPropagation();
+
     const isMetaPressed = event.metaKey || event.ctrlKey;
     onClickDay(date, isMetaPressed);
   }
@@ -451,6 +730,16 @@
       });
     };
 
+    // Refresh "created on this day" data when vault files change.
+    const vaultEventRefs: EventRef[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const vault = (window as any).app?.vault;
+    if (vault?.on && vault?.offref) {
+      vaultEventRefs.push(vault.on("create", scheduleCreatedOnDayIndexRebuild));
+      vaultEventRefs.push(vault.on("delete", scheduleCreatedOnDayIndexRebuild));
+      vaultEventRefs.push(vault.on("rename", scheduleCreatedOnDayIndexRebuild));
+    }
+
     schedule();
 
     window.addEventListener("resize", schedule, { passive: true });
@@ -484,6 +773,12 @@
     return () => {
       window.removeEventListener("resize", schedule);
       ro.disconnect();
+
+      if (vault?.offref) {
+        for (const ref of vaultEventRefs) {
+          vault.offref(ref);
+        }
+      }
     };
   });
 
@@ -491,6 +786,9 @@
     clearInterval(heartbeat);
     if (listComputeTimer !== null) {
       window.clearTimeout(listComputeTimer);
+    }
+    if (createdOnDayIndexTimer !== null) {
+      window.clearTimeout(createdOnDayIndexTimer);
     }
   });
 </script>
@@ -558,51 +856,149 @@
           open={yearOpenState[group.year]}
           on:toggle={(e) => onToggleYear(group.year, e)}
         >
-          <summary>{group.year}</summary>
+          <summary>
+            <span class="calendar-chevron" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M8 5v14l11-7-11-7z"></path>
+              </svg>
+            </span>
+            {group.year}
+          </summary>
 
           <div class="calendar-list-days">
             {#each group.items as item (item.dateUID)}
-              <div class="calendar-list-row">
-                <button
-                  class="calendar-list-day"
-                  class:is-active={item.dateUID === $activeFile}
-                  type="button"
-                  on:click={(e) => onClickListDay(item.date, e)}
-                >
-                  <span class="calendar-list-day-label">
-                    {getCachedOllamaTitle(
-                      item,
-                      $settings.ollamaTitlesEnabled,
-                      $ollamaTitleCache
-                    ) ?? item.dateStr}
-                  </span>
-                </button>
-
-                {#if $settings.ollamaTitlesEnabled}
-                  <button
-                    class="calendar-list-generate"
-                    class:is-loading={titleInFlight[item.filePath]}
-                    type="button"
-                    aria-label="Generate / refresh title"
-                    title="Generate / refresh title"
-                    disabled={titleInFlight[item.filePath]}
-                    on:click={(e) => onClickGenerateTitle(item, e)}
-                  >
-                    <svg
-                      focusable="false"
-                      role="img"
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path
-                        fill="currentColor"
-                        d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.9 9.4 1 1 0 1 0-1.97-.35A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L14 10h6V4l-2.35 2.35Z"
-                      />
+              <details
+                class="calendar-list-day-details"
+                class:is-empty={!hasDayChildren(item)}
+                open={dayOpenState[item.dateUID]}
+                on:toggle={(e) => onToggleDay(item.dateUID, e)}
+              >
+                <summary>
+                  <span class="calendar-chevron" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                      <path d="M8 5v14l11-7-11-7z"></path>
                     </svg>
-                  </button>
+                  </span>
+                  <div class="calendar-list-row">
+                    <button
+                      class="calendar-list-day"
+                      class:is-active={item.dateUID === $activeFile}
+                      type="button"
+                      on:click={(e) => onClickListDay(item.date, e)}
+                    >
+                      <span class="calendar-list-day-label">
+                        {getCachedOllamaTitle(
+                          item,
+                          $settings.ollamaTitlesEnabled,
+                          $ollamaTitleCache
+                        ) ?? item.dateStr}
+                      </span>
+                    </button>
+
+                    {#if $settings.ollamaTitlesEnabled && item.filePath}
+                      <button
+                        class="calendar-list-generate"
+                        class:is-loading={titleInFlight[item.filePath]}
+                        type="button"
+                        aria-label="Generate / refresh title"
+                        title="Generate / refresh title"
+                        disabled={titleInFlight[item.filePath]}
+                        on:click={(e) => onClickGenerateTitle(item, e)}
+                      >
+                        <svg
+                          focusable="false"
+                          role="img"
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                        >
+                          <path
+                            fill="currentColor"
+                            d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.9 9.4 1 1 0 1 0-1.97-.35A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L14 10h6V4l-2.35 2.35Z"
+                          />
+                        </svg>
+                      </button>
+                    {/if}
+                  </div>
+                </summary>
+
+                {#if dayOpenState[item.dateUID]}
+                  <div class="calendar-list-day-children">
+                    <!-- Notes created on this day, shown directly without a subgroup -->
+                    <div class="calendar-list-subitems">
+                      {#if createdOnDayIndexLoading}
+                        <div class="calendar-list-substatus">Indexing…</div>
+                      {:else if createdOnDayIndexError}
+                        <div class="calendar-list-suberror">
+                          {createdOnDayIndexError}
+                        </div>
+                      {:else}
+                        {#each getCreatedNotesForItem(item) as file (file.path)}
+                          <div
+                            class="calendar-list-entry"
+                            role="button"
+                            tabindex="0"
+                            on:click={(e) => onClickOpenFile(file, e)} on:keydown={(e) => onKeyOpenFile(file, e)}
+                          >
+                            <span class="calendar-list-entry-name" title={file.path}>
+                              {file.basename}{#if getFileExtension(file)}.{getFileExtension(file)}{/if}
+                            </span>
+                            
+                          </div>
+                        {/each}
+                      {/if}
+                    </div>
+
+                    {#if getCreatedFilesForItem(item).length}
+                     <details
+                       class="calendar-list-subgroup"
+                       open={dayChildOpenState[item.dateUID]?.files}
+                       on:toggle={(e) =>
+                         onToggleDayChild(item.dateUID, "files", e)}
+                     >
+                      <summary>
+                        <span class="calendar-chevron" aria-hidden="true">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                            <path d="M8 5v14l11-7-11-7z"></path>
+                          </svg>
+                        </span>
+                        Attachments
+                      </summary>
+
+                      {#if dayChildOpenState[item.dateUID]?.files}
+                        <div class="calendar-list-subitems calendar-list-subitems--subgroup">
+                          {#if createdOnDayIndexLoading}
+                            <div class="calendar-list-substatus">Indexing…</div>
+                          {:else if createdOnDayIndexError}
+                            <div class="calendar-list-suberror">
+                              {createdOnDayIndexError}
+                            </div>
+                          {:else}
+                            {#each getCreatedFilesForItem(item) as file (file.path)}
+                              <div
+                                class="calendar-list-entry"
+                                role="button"
+                                tabindex="0"
+                                on:click={(e) => onClickOpenFile(file, e)} on:keydown={(e) => onKeyOpenFile(file, e)}
+                              >
+                                <span class="calendar-list-entry-name" title={file.path}>
+                                  {file.name}
+                                </span>
+                                
+                              </div>
+                            {:else}
+                              <div class="calendar-list-subempty">
+                                No attachments created on this day.
+                              </div>
+                            {/each}
+                          {/if}
+                        </div>
+                      {/if}
+                    </details>
+                   {/if}
+                  </div>
                 {/if}
-              </div>
+              </details>
             {/each}
           </div>
         </details>

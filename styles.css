@@ -11,11 +11,42 @@
 }
 
 /* Calendar view tabs + List view */
+/* Normalize typography across buttons and summaries to match surrounding text */
+.calendar-view .calendar-list-day,
+.calendar-view .calendar-list-generate,
+.calendar-view .calendar-list-toggle,
+.calendar-view .calendar-list-year > summary,
+.calendar-view .calendar-list-day-details > summary,
+.calendar-view .calendar-list-subgroup > summary,
+.calendar-tab {
+  font: inherit;
+  line-height: inherit;
+}
+
+/* Stricter reset for consistency across themes */
+.calendar-view {
+  line-height: 1.4;
+}
+.calendar-view .calendar-list-year > summary,
+.calendar-view .calendar-list-day-details > summary,
+.calendar-view .calendar-list-subgroup > summary,
+.calendar-view .calendar-list-day,
+.calendar-view .calendar-list-entry {
+  font-size: 1em;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.calendar-view .calendar-list-day.is-active {
+  font-weight: 600;
+}
 .calendar-view {
   display: flex;
   flex-direction: column;
   height: 100%;
   position: relative;
+  /* Baseline: use the interface font across the entire Calendar view */
+  font-family: var(--font-interface);
 }
 
 /* Keep the calendar header in a single line on narrow panes */
@@ -179,25 +210,30 @@
   transition: background-color 120ms ease, color 120ms ease;
 }
 
-/* Hide default marker and use our own chevron */
-.calendar-view .calendar-list-year > summary::-webkit-details-marker {
+/* Hide default marker and use inline SVG chevron */
+.calendar-view .calendar-list-year > summary::-webkit-details-marker,
+.calendar-view .calendar-list-day-details > summary::-webkit-details-marker {
   display: none;
 }
 
-.calendar-view .calendar-list-year > summary::marker {
+.calendar-view .calendar-list-year > summary::marker,
+.calendar-view .calendar-list-day-details > summary::marker {
   content: "";
 }
 
-.calendar-view .calendar-list-year > summary::before {
-  content: "▸";
-  display: inline-block;
-  width: 12px;
+.calendar-view .calendar-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
   color: var(--text-muted);
-  transform: rotate(0deg);
-  transition: transform 120ms ease;
+  transition: transform 120ms ease, color 120ms ease;
 }
 
-.calendar-view .calendar-list-year[open] > summary::before {
+.calendar-view .calendar-list-year[open] > summary .calendar-chevron,
+.calendar-view .calendar-list-day-details[open] > summary .calendar-chevron {
   transform: rotate(90deg);
 }
 
@@ -242,6 +278,7 @@
   cursor: pointer;
   color: var(--text-muted);
   border-radius: 6px;
+  font-weight: 400;
 
   transition: background-color 120ms ease, color 120ms ease;
 
@@ -330,5 +367,171 @@
 .calendar-view .calendar-list-day.is-active {
   background: var(--background-secondary);
   color: var(--text-normal);
-  font-weight: 600;
+}
+
+/* Nested per-day toggles */
+.calendar-view .calendar-list-day-details {
+  border-radius: 8px;
+}
+
+.calendar-view .calendar-list-day-details > summary {
+  cursor: pointer;
+  user-select: none;
+
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  padding: 0;
+  border-radius: 6px;
+}
+
+.calendar-view .calendar-list-day-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.calendar-view .calendar-list-day-details > summary::marker {
+  content: "";
+}
+
+/* removed pseudo chevron: using inline svg now */
+/* old day pseudo chevron removed */
+
+/* Dim the day toggle when there are no created notes or attachments */
+.calendar-view .calendar-list-day-details.is-empty > summary .calendar-chevron {
+  color: var(--text-faint);
+  opacity: 0.6;
+}
+
+/* removed */
+/* removed pseudo chevron rotation */
+/* .calendar-view .calendar-list-day-details[open] > summary::before { } */
+
+.calendar-view .calendar-list-day-details > summary > .calendar-list-row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.calendar-view .calendar-list-day-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  /* Keep children visually grouped without adding another indentation level */
+  padding:  0 0 0 25px;
+  align-items: stretch;
+}
+
+/* Sub-folder toggles under a day */
+.calendar-view .calendar-list-subgroup {
+  border-radius: 8px;
+}
+
+.calendar-view .calendar-list-subgroup > summary {
+  cursor: pointer;
+  user-select: none;
+
+  padding: 4px 4px;
+  color: var(--text-muted);
+
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  border-radius: 6px;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.calendar-view .calendar-list-subgroup > summary:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.calendar-view .calendar-list-subgroup > summary::-webkit-details-marker {
+  display: none;
+}
+
+.calendar-view .calendar-list-subgroup > summary::marker {
+  content: "";
+}
+
+/* remove subgroup pseudo chevron: using inline svg */
+/* subgroup chevron rotates using inline svg */
+.calendar-view .calendar-list-subgroup[open] > summary .calendar-chevron {
+  transform: rotate(90deg);
+}
+
+.calendar-view .calendar-list-subitems {
+}
+
+/* Subitems inside a subgroup (e.g., Attachments) should not add extra indentation */
+.calendar-view .calendar-list-subitems--subgroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 0 0 25px;
+  align-items: stretch;
+}
+
+.calendar-view .calendar-list-entry {
+  appearance: none;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+
+  padding: 4px 6px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-radius: 6px;
+
+  /* Ensure attachments/created files use the same typography as the day row */
+  font: inherit;
+  line-height: inherit;
+  font-weight: 400;
+
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.calendar-view .calendar-list-entry:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.calendar-view .calendar-list-entry:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+.calendar-view .calendar-list-entry-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-view .calendar-list-entry-path {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.calendar-view .calendar-list-substatus,
+.calendar-view .calendar-list-subempty {
+  color: var(--text-muted);
+  padding: 4px 6px;
+}
+
+.calendar-view .calendar-list-suberror {
+  color: var(--text-error);
+  padding: 4px 6px;
 }
