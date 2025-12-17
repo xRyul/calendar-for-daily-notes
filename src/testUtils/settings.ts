@@ -12,6 +12,7 @@ export function getDefaultSettings(
 
       listViewMinWords: 0,
       listViewIncludeCreatedDays: true,
+      listViewGroupingPreset: "year",
 
       showWeeklyNote: false,
       weeklyNoteFolder: "",

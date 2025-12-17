@@ -1,6 +1,13 @@
 import type { Moment } from "moment";
 import type { TFile } from "obsidian";
 
+export type ListViewGroupingPreset =
+  | "year"
+  | "year_month"
+  | "year_month_name"
+  | "year_quarter"
+  | "year_week";
+
 export type CreatedOnDayBucket = { notes: TFile[]; files: TFile[] };
 
 export type DailyNoteCandidate = {
@@ -31,7 +38,18 @@ export type ListItem = {
   dailyNoteExists: boolean;
 };
 
-export type YearGroup = { year: number; items: ListItem[] };
+export type ListGroupNode = {
+  // Stable path-like key, e.g. `2025/12`
+  id: string;
+  // Display label for the group header
+  label: string;
+  // Child groups (empty for leaf groups)
+  groups: ListGroupNode[];
+  // Leaf group items (empty for non-leaf groups)
+  items: ListItem[];
+  // Internal: max descendant epoch for sorting by recency
+  maxEpoch?: number;
+};
 
 export function buildListItems(params: {
   dailyNoteCandidates: DailyNoteCandidate[];
@@ -120,4 +138,160 @@ export function buildListItems(params: {
 
   items.sort((a, b) => b.epoch - a.epoch);
   return items;
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+export function normalizeListViewGroupingPreset(
+  preset: unknown
+): ListViewGroupingPreset {
+  switch (preset) {
+    case "year":
+    case "year_month":
+    case "year_month_name":
+    case "year_quarter":
+    case "year_week":
+      return preset;
+    default:
+      return "year";
+  }
+}
+
+type GroupSegment = { idPart: string; label: string };
+
+function getSegmentsForDate(
+  date: Moment,
+  preset: ListViewGroupingPreset
+): GroupSegment[] {
+  switch (preset) {
+    case "year": {
+      const year = String(date.year());
+      return [{ idPart: year, label: year }];
+    }
+
+    case "year_month": {
+      const year = String(date.year());
+      const month = pad2(date.month() + 1);
+      return [
+        { idPart: year, label: year },
+        { idPart: month, label: month },
+      ];
+    }
+
+    case "year_month_name": {
+      const year = String(date.year());
+      const monthId = pad2(date.month() + 1);
+      const monthLabel = date.format("MMMM");
+      return [
+        { idPart: year, label: year },
+        // Keep id numeric so open/closed state is stable across locale changes.
+        { idPart: monthId, label: monthLabel },
+      ];
+    }
+
+    case "year_quarter": {
+      const year = String(date.year());
+      const q = `Q${date.quarter()}`;
+      return [
+        { idPart: year, label: year },
+        { idPart: q, label: q },
+      ];
+    }
+
+    case "year_week": {
+      const isoYear = String(date.isoWeekYear());
+      const week = pad2(date.isoWeek());
+      return [
+        { idPart: isoYear, label: isoYear },
+        { idPart: week, label: `W${week}` },
+      ];
+    }
+  }
+}
+
+export function getListGroupIdPathForDate(
+  date: Moment,
+  preset: unknown
+): string[] {
+  const normalized = normalizeListViewGroupingPreset(preset);
+  const segments = getSegmentsForDate(date, normalized);
+
+  const path: string[] = [];
+  const parts: string[] = [];
+  for (const seg of segments) {
+    parts.push(seg.idPart);
+    path.push(parts.join("/"));
+  }
+
+  return path;
+}
+
+type ListGroupNodeInternal = Omit<ListGroupNode, "groups"> & {
+  children: Map<string, ListGroupNodeInternal>;
+};
+
+export function buildListGroups(
+  items: ListItem[],
+  preset: unknown
+): ListGroupNode[] {
+  const normalized = normalizeListViewGroupingPreset(preset);
+
+  const root = new Map<string, ListGroupNodeInternal>();
+
+  for (const item of items) {
+    const segs = getSegmentsForDate(item.date, normalized);
+
+    let current = root;
+    const parts: string[] = [];
+    let leaf: ListGroupNodeInternal | null = null;
+
+    for (const seg of segs) {
+      parts.push(seg.idPart);
+      const id = parts.join("/");
+
+      let node = current.get(id);
+      if (!node) {
+        node = {
+          id,
+          label: seg.label,
+          children: new Map(),
+          items: [],
+          maxEpoch: -Infinity,
+        };
+        current.set(id, node);
+      } else if (node.label !== seg.label) {
+        // Keep id stable and allow label to change (e.g., locale change for month names).
+        node.label = seg.label;
+      }
+
+      node.maxEpoch = Math.max(node.maxEpoch ?? -Infinity, item.epoch);
+      leaf = node;
+      current = node.children;
+    }
+
+    if (leaf) {
+      leaf.items.push(item);
+    }
+  }
+
+  const finalize = (node: ListGroupNodeInternal): ListGroupNode => {
+    const groups = Array.from(node.children.values())
+      .sort((a, b) => (b.maxEpoch ?? 0) - (a.maxEpoch ?? 0))
+      .map(finalize);
+
+    return {
+      id: node.id,
+      label: node.label,
+      groups,
+      // Only leaf groups should carry items.
+      items: groups.length ? [] : node.items,
+      maxEpoch: node.maxEpoch,
+    };
+  };
+
+  return Array.from(root.values())
+    .sort((a, b) => (b.maxEpoch ?? 0) - (a.maxEpoch ?? 0))
+    .map(finalize);
 }

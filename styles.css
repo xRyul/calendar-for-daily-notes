@@ -15,7 +15,7 @@
 .calendar-view .calendar-list-day,
 .calendar-view .calendar-list-generate,
 .calendar-view .calendar-list-toggle,
-.calendar-view .calendar-list-year > summary,
+.calendar-view .calendar-list-group > summary,
 .calendar-view .calendar-list-day-details > summary,
 .calendar-view .calendar-list-subgroup > summary,
 .calendar-tab {
@@ -27,7 +27,7 @@
 .calendar-view {
   line-height: 1.4;
 }
-.calendar-view .calendar-list-year > summary,
+.calendar-view .calendar-list-group > summary,
 .calendar-view .calendar-list-day-details > summary,
 .calendar-view .calendar-list-subgroup > summary,
 .calendar-view .calendar-list-day,
@@ -286,9 +286,39 @@
   line-height: 1.2;
 }
 
-.calendar-ollama-menu .calendar-ollama-field input {
+.calendar-ollama-menu .calendar-ollama-field input,
+.calendar-ollama-menu .calendar-ollama-field select {
   width: 100%;
   min-width: 0;
+}
+
+/* Make selects look/feel like selects (not plain buttons) */
+.calendar-ollama-menu .calendar-select {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.calendar-ollama-menu .calendar-select select {
+  cursor: pointer;
+  padding-right: 28px;
+}
+
+.calendar-ollama-menu .calendar-select-chevron {
+  position: absolute;
+  right: 8px;
+  pointer-events: none;
+  color: var(--text-faint);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.calendar-ollama-menu .calendar-select-chevron svg {
+  width: 16px;
+  height: 16px;
 }
 
 .calendar-ollama-menu .calendar-ollama-menu-actions {
@@ -526,11 +556,11 @@
   padding: 6px 0;
 }
 
-.calendar-view .calendar-list-year {
+.calendar-view .calendar-list-group {
   border-radius: 8px;
 }
 
-.calendar-view .calendar-list-year > summary {
+.calendar-view .calendar-list-group > summary {
   cursor: pointer;
   user-select: none;
   padding: 6px 4px;
@@ -546,12 +576,12 @@
 }
 
 /* Hide default marker and use inline SVG chevron */
-.calendar-view .calendar-list-year > summary::-webkit-details-marker,
+.calendar-view .calendar-list-group > summary::-webkit-details-marker,
 .calendar-view .calendar-list-day-details > summary::-webkit-details-marker {
   display: none;
 }
 
-.calendar-view .calendar-list-year > summary::marker,
+.calendar-view .calendar-list-group > summary::marker,
 .calendar-view .calendar-list-day-details > summary::marker {
   content: "";
 }
@@ -567,16 +597,16 @@
   transition: transform 120ms ease, color 120ms ease;
 }
 
-.calendar-view .calendar-list-year[open] > summary .calendar-chevron,
+.calendar-view .calendar-list-group[open] > summary .calendar-chevron,
 .calendar-view .calendar-list-day-details[open] > summary .calendar-chevron {
   transform: rotate(90deg);
 }
 
-.calendar-view .calendar-list-year > summary:hover {
+.calendar-view .calendar-list-group > summary:hover {
   background: var(--background-modifier-hover);
 }
 
-.calendar-view .calendar-list-year > summary:focus-visible {
+.calendar-view .calendar-list-group > summary:focus-visible {
   outline: 2px solid var(--interactive-accent);
   outline-offset: 2px;
 }

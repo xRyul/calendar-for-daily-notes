@@ -1,13 +1,28 @@
 import moment from "moment";
 import type { TFile } from "obsidian";
 
-import { buildListItems } from "./listViewModel";
+import { buildListGroups, buildListItems } from "./listViewModel";
+import type { ListItem } from "./listViewModel";
 
 describe("ui/listViewModel", () => {
   const parseDateStr = (dateStr: string) => moment(dateStr, "YYYY-MM-DD", true);
   const getDayDateUID = (date: moment.Moment) => date.format("YYYY-MM-DD");
 
   const mockFile = (path: string): TFile => ({ path } as unknown as TFile);
+
+  const makeItem = (dateStr: string): ListItem => {
+    const date = moment(dateStr, "YYYY-MM-DD", true);
+    return {
+      date,
+      dateUID: dateStr,
+      dateStr,
+      epoch: date.valueOf(),
+      year: date.year(),
+      filePath: "",
+      mtime: 0,
+      dailyNoteExists: false,
+    };
+  };
 
   it("includes qualifying daily notes", () => {
     const date = moment("2025-12-15", "YYYY-MM-DD", true);
@@ -109,5 +124,92 @@ describe("ui/listViewModel", () => {
     });
 
     expect(items).toEqual([]);
+  });
+
+  describe("buildListGroups", () => {
+    beforeEach(() => {
+      moment.locale("en");
+    });
+
+    it("groups by year (current behavior)", () => {
+      const items = [makeItem("2025-12-15"), makeItem("2025-01-01")];
+      const groups = buildListGroups(items, "year");
+
+      expect(groups).toHaveLength(1);
+      expect(groups[0].id).toBe("2025");
+      expect(groups[0].label).toBe("2025");
+      expect(groups[0].groups).toEqual([]);
+      expect(groups[0].items.map((i) => i.dateStr)).toEqual([
+        "2025-12-15",
+        "2025-01-01",
+      ]);
+    });
+
+    it("nests month groups under year (year_month)", () => {
+      const items = [makeItem("2025-12-15"), makeItem("2025-11-30")];
+      const groups = buildListGroups(items, "year_month");
+
+      expect(groups).toHaveLength(1);
+      expect(groups[0].id).toBe("2025");
+      expect(groups[0].items).toEqual([]);
+
+      const months = groups[0].groups;
+      expect(months.map((m) => m.id)).toEqual(["2025/12", "2025/11"]);
+      expect(months.map((m) => m.label)).toEqual(["12", "11"]);
+
+      expect(months[0].items.map((i) => i.dateStr)).toEqual(["2025-12-15"]);
+      expect(months[1].items.map((i) => i.dateStr)).toEqual(["2025-11-30"]);
+    });
+
+    it("nests month groups under year and labels months using locale (year_month_name)", () => {
+      const items = [makeItem("2025-12-15"), makeItem("2025-11-30")];
+      const groups = buildListGroups(items, "year_month_name");
+
+      expect(groups).toHaveLength(1);
+      const months = groups[0].groups;
+
+      // IDs should be numeric (stable across locale changes)
+      expect(months.map((m) => m.id)).toEqual(["2025/12", "2025/11"]);
+      expect(months.map((m) => m.label)).toEqual(["December", "November"]);
+    });
+
+    it("nests quarter groups under year (year_quarter)", () => {
+      const d1 = moment("2025-12-15", "YYYY-MM-DD", true);
+      const q1 = `Q${d1.quarter()}`;
+
+      const items = [makeItem("2025-12-15")];
+      const groups = buildListGroups(items, "year_quarter");
+
+      expect(groups).toHaveLength(1);
+      expect(groups[0].id).toBe("2025");
+      expect(groups[0].groups).toHaveLength(1);
+      expect(groups[0].groups[0].id).toBe(`2025/${q1}`);
+      expect(groups[0].groups[0].label).toBe(q1);
+      expect(groups[0].groups[0].items.map((i) => i.dateStr)).toEqual([
+        "2025-12-15",
+      ]);
+    });
+
+    it("groups by ISO year → ISO week (year_week)", () => {
+      const d = moment("2025-12-15", "YYYY-MM-DD", true);
+      const isoYear = String(d.isoWeekYear());
+      const week = String(d.isoWeek()).padStart(2, "0");
+
+      const items = [makeItem("2025-12-15")];
+      const groups = buildListGroups(items, "year_week");
+
+      expect(groups).toHaveLength(1);
+      expect(groups[0].id).toBe(isoYear);
+      expect(groups[0].groups).toHaveLength(1);
+      expect(groups[0].groups[0].id).toBe(`${isoYear}/${week}`);
+      expect(groups[0].groups[0].label).toBe(`W${week}`);
+    });
+
+    it("sorts groups by most recent descendant epoch", () => {
+      const items = [makeItem("2024-12-31"), makeItem("2025-01-01")];
+      const groups = buildListGroups(items, "year");
+
+      expect(groups.map((g) => g.id)).toEqual(["2025", "2024"]);
+    });
   });
 });
