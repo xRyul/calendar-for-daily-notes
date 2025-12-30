@@ -1,6 +1,6 @@
 {
   "name": "calendar",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Calendar view of your daily notes",
   "author": "Liam Cain (fork by xRyul)",
   "main": "main.js",
