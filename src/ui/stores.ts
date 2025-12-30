@@ -7,6 +7,7 @@ import {
 } from "obsidian-daily-notes-interface";
 import { writable } from "svelte/store";
 
+import type { CustomListTitles } from "src/customListTitles";
 import type { OllamaTitleCache } from "src/ollama/cache";
 import { defaultSettings, ISettings } from "src/settings";
 
@@ -89,6 +90,7 @@ export const dailyNotes = createDailyNotesStore();
 export const weeklyNotes = createWeeklyNotesStore();
 
 export const ollamaTitleCache = writable<OllamaTitleCache>({});
+export const customListTitles = writable<CustomListTitles>({});
 
 function createSelectedFileStore() {
   const store = writable<string>(null);

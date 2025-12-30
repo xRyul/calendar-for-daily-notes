@@ -47,9 +47,16 @@
     prepareNoteTextForOllama,
   } from "src/ollama/title";
 
+  import type { CustomListTitles } from "src/customListTitles";
+  import {
+    formatCustomListTitleLabel,
+    normalizeCustomListTitleInput,
+  } from "src/customListTitles";
+
   import type { ISettings } from "src/settings";
   import {
     activeFile,
+    customListTitles,
     dailyNotes,
     ollamaTitleCache,
     settings,
@@ -578,6 +585,116 @@
   let prevListViewIncludeCreatedDays: boolean | null = null;
 
   let titleInFlight: Record<string, boolean> = {};
+
+  // Per-day custom list titles (manual overrides)
+  let editingCustomTitleDateUID: string | null = null;
+  let editingCustomTitleDateStr: string | null = null;
+  let editingCustomTitleValue = "";
+  let editingCustomTitleInputEl: HTMLInputElement | null = null;
+  let suppressNextCustomTitleBlurSave = false;
+
+  function getCustomTitleLabel(
+    item: ListItem,
+    titles: CustomListTitles | null | undefined
+  ): string | null {
+    const suffix = titles?.[item.dateStr];
+    if (typeof suffix !== "string" || !suffix.trim()) {
+      return null;
+    }
+    return formatCustomListTitleLabel(item.dateStr, suffix);
+  }
+
+  function clearCustomTitleEditState(): void {
+    editingCustomTitleDateUID = null;
+    editingCustomTitleDateStr = null;
+    editingCustomTitleValue = "";
+    suppressNextCustomTitleBlurSave = false;
+  }
+
+  function cancelCustomTitleEdit(): void {
+    clearCustomTitleEditState();
+  }
+
+  function saveCustomTitleEdit(): void {
+    const dateStr = editingCustomTitleDateStr;
+    if (!dateStr) {
+      clearCustomTitleEditState();
+      return;
+    }
+
+    const normalized = normalizeCustomListTitleInput({
+      dateStr,
+      input: editingCustomTitleValue,
+    });
+
+    customListTitles.update((prev) => {
+      const base = prev ?? {};
+      const next: CustomListTitles = { ...base };
+
+      if (normalized) {
+        next[dateStr] = normalized;
+      } else {
+        delete next[dateStr];
+      }
+
+      return next;
+    });
+
+    clearCustomTitleEditState();
+  }
+
+  function onCustomTitleInputKeyDown(event: KeyboardEvent): void {
+    // Prevent <summary> toggle while typing.
+    event.stopPropagation();
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      saveCustomTitleEdit();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelCustomTitleEdit();
+    }
+  }
+
+  function onCustomTitleInputBlur(): void {
+    if (suppressNextCustomTitleBlurSave) {
+      suppressNextCustomTitleBlurSave = false;
+      return;
+    }
+
+    saveCustomTitleEdit();
+  }
+
+  async function onClickEditCustomTitle(
+    item: ListItem,
+    event: MouseEvent
+  ): Promise<void> {
+    event.preventDefault();
+    event.stopPropagation();
+
+    // If the same row is already being edited, treat the pencil click as "done".
+    if (editingCustomTitleDateUID === item.dateUID) {
+      saveCustomTitleEdit();
+      return;
+    }
+
+    // If another row is being edited, save it first.
+    if (editingCustomTitleDateUID && editingCustomTitleDateUID !== item.dateUID) {
+      saveCustomTitleEdit();
+    }
+
+    const existing = $customListTitles?.[item.dateStr] ?? "";
+    editingCustomTitleDateUID = item.dateUID;
+    editingCustomTitleDateStr = item.dateStr;
+    editingCustomTitleValue = existing;
+
+    await svelteTick();
+    editingCustomTitleInputEl?.focus();
+    editingCustomTitleInputEl?.select();
+  }
 
   let listComputeNonce = 0;
   // Obsidian runs in an Electron (DOM) environment; window.setTimeout returns a numeric ID.
@@ -2073,21 +2190,46 @@
                   </svg>
                 </span>
                 <div class="calendar-list-row">
-                  <button
-                    class="calendar-list-day"
-                    class:is-active={item.dateUID === $activeFile}
-                    class:is-missing-daily={!item.dailyNoteExists}
-                    type="button"
-                    on:click={(e) => onClickListDay(item.date, e)}
-                  >
-                    <span class="calendar-list-day-label">
-                      {getCachedOllamaTitle(
-                        item,
-                        $settings.ollamaTitlesEnabled,
-                        $ollamaTitleCache
-                      ) ?? item.dateStr}
-                    </span>
-                  </button>
+                  {#if editingCustomTitleDateUID === item.dateUID}
+                    <div
+                      class="calendar-list-day-editor"
+                      on:click|stopPropagation
+                      on:mousedown|stopPropagation
+                    >
+                      <span class="calendar-list-day-date">{item.dateStr}</span>
+                      <span class="calendar-list-day-sep"> - </span>
+                      <input
+                        class="calendar-list-day-input"
+                        type="text"
+                        bind:this={editingCustomTitleInputEl}
+                        bind:value={editingCustomTitleValue}
+                        placeholder="Add title…"
+                        aria-label={`Custom title for ${item.dateStr}`}
+                        on:click|stopPropagation
+                        on:mousedown|stopPropagation
+                        on:keydown={onCustomTitleInputKeyDown}
+                        on:blur={onCustomTitleInputBlur}
+                      />
+                    </div>
+                  {:else}
+                    <button
+                      class="calendar-list-day"
+                      class:is-active={item.dateUID === $activeFile}
+                      class:is-missing-daily={!item.dailyNoteExists}
+                      type="button"
+                      on:click={(e) => onClickListDay(item.date, e)}
+                    >
+                      <span class="calendar-list-day-label">
+                        {getCustomTitleLabel(item, $customListTitles) ??
+                          getCachedOllamaTitle(
+                            item,
+                            $settings.ollamaTitlesEnabled,
+                            $ollamaTitleCache
+                          ) ??
+                          item.dateStr}
+                      </span>
+                    </button>
+                  {/if}
 
                   {#if $settings.ollamaTitlesEnabled && item.filePath}
                     <button
@@ -2113,6 +2255,52 @@
                       </svg>
                     </button>
                   {/if}
+
+                  <button
+                    class="calendar-list-edit-title"
+                    class:is-editing={editingCustomTitleDateUID === item.dateUID}
+                    type="button"
+                    aria-label={editingCustomTitleDateUID === item.dateUID
+                      ? "Save custom title"
+                      : "Edit custom title"}
+                    title={editingCustomTitleDateUID === item.dateUID
+                      ? "Save custom title"
+                      : "Edit custom title"}
+                    on:mousedown={() => {
+                      if (editingCustomTitleDateUID === item.dateUID) {
+                        suppressNextCustomTitleBlurSave = true;
+                      }
+                    }}
+                    on:click={(e) => onClickEditCustomTitle(item, e)}
+                  >
+                    {#if editingCustomTitleDateUID === item.dateUID}
+                      <svg
+                        focusable="false"
+                        role="img"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          fill="currentColor"
+                          d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"
+                        />
+                      </svg>
+                    {:else}
+                      <svg
+                        focusable="false"
+                        role="img"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          fill="currentColor"
+                          d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l9.06-9.06.92.92L5.92 19.58zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+                        />
+                      </svg>
+                    {/if}
+                  </button>
                 </div>
               </summary>
 

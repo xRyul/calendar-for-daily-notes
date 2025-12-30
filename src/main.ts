@@ -1,11 +1,14 @@
 import type { Moment, WeekSpec } from "moment";
 import { App, Plugin, WorkspaceLeaf } from "obsidian";
 
+import type { CustomListTitles } from "src/customListTitles";
+import { sanitizeCustomListTitles } from "src/customListTitles";
+
 import type { OllamaTitleCache } from "src/ollama/cache";
 import { pruneOllamaTitleCache, sanitizeOllamaTitleCache } from "src/ollama/cache";
 
 import { VIEW_TYPE_CALENDAR } from "./constants";
-import { ollamaTitleCache, settings } from "./ui/stores";
+import { customListTitles, ollamaTitleCache, settings } from "./ui/stores";
 import {
   appHasPeriodicNotesPluginLoaded,
   CalendarSettingsTab,
@@ -25,6 +28,7 @@ declare global {
 type PluginDataV2 = {
   settings: ISettings;
   ollamaTitleCache: OllamaTitleCache;
+  customListTitles: CustomListTitles;
 };
 
 export default class CalendarPlugin extends Plugin {
@@ -36,6 +40,7 @@ export default class CalendarPlugin extends Plugin {
   private data: PluginDataV2 = {
     settings: { ...defaultSettings } as ISettings,
     ollamaTitleCache: {},
+    customListTitles: {},
   };
 
   onunload(): void {
@@ -62,6 +67,15 @@ export default class CalendarPlugin extends Plugin {
     this.register(
       ollamaTitleCache.subscribe((cache) => {
         this.data = { ...this.data, ollamaTitleCache: cache };
+        if (!this.isLoadingData) {
+          this.scheduleSaveData();
+        }
+      })
+    );
+
+    this.register(
+      customListTitles.subscribe((titles) => {
+        this.data = { ...this.data, customListTitles: titles };
         if (!this.isLoadingData) {
           this.scheduleSaveData();
         }
@@ -149,6 +163,7 @@ export default class CalendarPlugin extends Plugin {
     await this.saveData({
       settings: this.options,
       ollamaTitleCache: prunedCache,
+      customListTitles: this.data.customListTitles,
     } as PluginDataV2);
   }
 
@@ -176,6 +191,9 @@ export default class CalendarPlugin extends Plugin {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cacheData = isV2 ? (raw as any).ollamaTitleCache : undefined;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const customTitlesData = isV2 ? (raw as any).customListTitles : undefined;
+
     const mergedSettings = {
       ...defaultSettings,
       ...(settingsData || {}),
@@ -188,6 +206,9 @@ export default class CalendarPlugin extends Plugin {
       mergedSettings.ollamaTitleCacheMaxEntries
     );
     ollamaTitleCache.set(sanitizedCache);
+
+    const sanitizedCustomTitles = sanitizeCustomListTitles(customTitlesData);
+    customListTitles.set(sanitizedCustomTitles);
 
     this.isLoadingData = false;
 
