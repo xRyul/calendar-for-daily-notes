@@ -9,7 +9,7 @@
   import type { ICalendarSource } from "obsidian-calendar-ui";
   import { onDestroy, onMount, tick as svelteTick } from "svelte";
   import { slide } from "svelte/transition";
-  import { Notice, TFile } from "obsidian";
+  import { Menu, Notice, TFile } from "obsidian";
   import type { EventRef } from "obsidian";
   import { getDateFromFile, getDateUID } from "obsidian-daily-notes-interface";
 
@@ -58,6 +58,7 @@
     activeFile,
     customListTitles,
     dailyNotes,
+    listItemColorTags,
     ollamaTitleCache,
     settings,
     weeklyNotes,
@@ -1493,6 +1494,169 @@
     onClickDay(date, isMetaPressed);
   }
 
+  type ListItemTagColor = { label: string; color: string };
+
+  const LIST_ITEM_TAG_COLORS: ListItemTagColor[] = [
+    { label: "Red", color: "#ef4444" },
+    { label: "Orange", color: "#f97316" },
+    { label: "Yellow", color: "#eab308" },
+    { label: "Green", color: "#22c55e" },
+    { label: "Blue", color: "#3b82f6" },
+    { label: "Purple", color: "#a855f7" },
+    { label: "Pink", color: "#ec4899" },
+    { label: "Gray", color: "#64748b" },
+  ];
+
+  function getListItemTagKeyForDay(item: ListItem): string {
+    return `day:${item.dateStr}`;
+  }
+
+  function getListItemTagKeyForFile(file: TFile): string {
+    const path = file?.path ?? "";
+    return path ? `file:${path}` : "";
+  }
+
+  function setListItemColorTag(key: string, color: string | null): void {
+    if (!key) {
+      return;
+    }
+
+    listItemColorTags.update((prev) => {
+      const base = prev ?? {};
+      const next = { ...base };
+
+      if (!color) {
+        delete next[key];
+      } else {
+        next[key] = color;
+      }
+
+      return next;
+    });
+  }
+
+  function getListItemColorTagFrom(
+    tags: Record<string, string> | null | undefined,
+    key: string
+  ): string | null {
+    if (!key) {
+      return null;
+    }
+
+    const map = (tags ?? {}) as Record<string, unknown>;
+    const value = map[key];
+    return typeof value === "string" && value ? value : null;
+  }
+
+  function isEditableContextMenuTarget(event: MouseEvent): boolean {
+    const target = event.target as HTMLElement | null;
+    if (!target) {
+      return false;
+    }
+
+    const el = target.closest(
+      "input, textarea, [contenteditable='true'], [contenteditable=''], [contenteditable='plaintext-only']"
+    );
+    return !!el;
+  }
+
+  function showListItemColorTagMenu(args: {
+    key: string;
+    event: MouseEvent;
+  }): void {
+    const { key, event } = args;
+    if (!key) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const current = getListItemColorTagFrom($listItemColorTags, key) ?? "";
+
+    const menu = new Menu();
+    menu.addItem((item) => item.setTitle("Color tag").setIsLabel(true));
+
+    menu.addItem((item) => {
+      item.setTitle("None");
+      item.setChecked(!current);
+      item.onClick(() => setListItemColorTag(key, null));
+    });
+
+    for (const opt of LIST_ITEM_TAG_COLORS) {
+      menu.addItem((item) => {
+        item.setTitle(opt.label);
+        item.setChecked(current === opt.color);
+        item.onClick(() => setListItemColorTag(key, opt.color));
+      });
+    }
+
+    menu.showAtMouseEvent(event);
+  }
+
+  function onContextMenuListDay(item: ListItem, event: MouseEvent): void {
+    // Allow normal text context menu for the inline custom title editor.
+    if (isEditableContextMenuTarget(event)) {
+      return;
+    }
+
+    const key = getListItemTagKeyForDay(item);
+    showListItemColorTagMenu({ key, event });
+  }
+
+  function onContextMenuListFile(file: TFile, event: MouseEvent): void {
+    const key = getListItemTagKeyForFile(file);
+    showListItemColorTagMenu({ key, event });
+  }
+
+  function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+    const s = (hex ?? "").trim();
+    const m = /^#([0-9a-fA-F]{6})$/.exec(s);
+    if (!m) {
+      return null;
+    }
+
+    const n = parseInt(m[1], 16);
+    const r = (n >> 16) & 0xff;
+    const g = (n >> 8) & 0xff;
+    const b = n & 0xff;
+
+    return { r, g, b };
+  }
+
+  function rgbaFromHex(hex: string, alpha: number): string | null {
+    const rgb = hexToRgb(hex);
+    if (!rgb) {
+      return null;
+    }
+
+    const a = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${a})`;
+  }
+
+  function getListItemTagStyle(
+    tags: Record<string, string> | null | undefined,
+    key: string
+  ): string {
+    const color = getListItemColorTagFrom(tags, key);
+    if (!color) {
+      return "";
+    }
+
+    // Subtle tint; should feel like a highlight, not a block.
+    const bg = rgbaFromHex(color, 0.14) ?? color;
+    const bgHover = rgbaFromHex(color, 0.2) ?? color;
+
+    return `--calendar-list-tag-color: ${color}; --calendar-list-tag-bg: ${bg}; --calendar-list-tag-bg-hover: ${bgHover};`;
+  }
+
+  function isListItemTagged(
+    tags: Record<string, string> | null | undefined,
+    key: string
+  ): boolean {
+    return !!getListItemColorTagFrom(tags, key);
+  }
+
   $: {
     const includeCreatedDays = $settings.listViewIncludeCreatedDays ?? true;
 
@@ -2183,7 +2347,11 @@
               open={dayOpenState[item.dateUID]}
               on:toggle={(e) => onToggleDay(item.dateUID, e)}
             >
-              <summary>
+              <summary
+                class:is-color-tagged={isListItemTagged($listItemColorTags, getListItemTagKeyForDay(item))}
+                style={getListItemTagStyle($listItemColorTags, getListItemTagKeyForDay(item))}
+                on:contextmenu={(e) => onContextMenuListDay(item, e)}
+              >
                 <span class="calendar-chevron" aria-hidden="true">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                     <path d="M8 5v14l11-7-11-7z"></path>
@@ -2319,9 +2487,13 @@
                       {#each getCreatedNotesForItem(item) as file (file.path)}
                         <div
                           class="calendar-list-entry"
+                          class:is-color-tagged={isListItemTagged($listItemColorTags, getListItemTagKeyForFile(file))}
+                          style={getListItemTagStyle($listItemColorTags, getListItemTagKeyForFile(file))}
                           role="button"
                           tabindex="0"
-                          on:click={(e) => onClickOpenFile(file, e)} on:keydown={(e) => onKeyOpenFile(file, e)}
+                          on:click={(e) => onClickOpenFile(file, e)}
+                          on:keydown={(e) => onKeyOpenFile(file, e)}
+                          on:contextmenu={(e) => onContextMenuListFile(file, e)}
                         >
                           <span class="calendar-list-entry-name" title={file.path}>
                             {file.basename}{#if getFileExtension(file)}.{getFileExtension(file)}{/if}
@@ -2360,9 +2532,13 @@
                           {#each getCreatedFilesForItem(item) as file (file.path)}
                             <div
                               class="calendar-list-entry"
+                              class:is-color-tagged={isListItemTagged($listItemColorTags, getListItemTagKeyForFile(file))}
+                              style={getListItemTagStyle($listItemColorTags, getListItemTagKeyForFile(file))}
                               role="button"
                               tabindex="0"
-                              on:click={(e) => onClickOpenFile(file, e)} on:keydown={(e) => onKeyOpenFile(file, e)}
+                              on:click={(e) => onClickOpenFile(file, e)}
+                              on:keydown={(e) => onKeyOpenFile(file, e)}
+                              on:contextmenu={(e) => onContextMenuListFile(file, e)}
                             >
                               <span class="calendar-list-entry-name" title={file.path}>
                                 {file.name}

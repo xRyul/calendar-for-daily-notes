@@ -8,6 +8,7 @@ import {
 import { writable } from "svelte/store";
 
 import type { CustomListTitles } from "src/customListTitles";
+import type { ListItemColorTags } from "src/listItemColorTags";
 import type { OllamaTitleCache } from "src/ollama/cache";
 import { defaultSettings, ISettings } from "src/settings";
 
@@ -91,6 +92,7 @@ export const weeklyNotes = createWeeklyNotesStore();
 
 export const ollamaTitleCache = writable<OllamaTitleCache>({});
 export const customListTitles = writable<CustomListTitles>({});
+export const listItemColorTags = writable<ListItemColorTags>({});
 
 function createSelectedFileStore() {
   const store = writable<string>(null);

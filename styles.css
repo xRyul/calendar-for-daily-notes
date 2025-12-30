@@ -1001,3 +1001,26 @@
   color: var(--text-error);
   padding: 4px 6px;
 }
+
+/* List view color tags (right-click an item) */
+.calendar-view .calendar-list-day-details > summary.is-color-tagged,
+.calendar-view .calendar-list-entry.is-color-tagged {
+  background-color: var(--calendar-list-tag-bg, var(--calendar-list-tag-color)) !important;
+}
+
+.calendar-view .calendar-list-day-details > summary.is-color-tagged:hover,
+.calendar-view .calendar-list-entry.is-color-tagged:hover {
+  background-color: var(--calendar-list-tag-bg-hover, var(--calendar-list-tag-color)) !important;
+}
+
+/* Keep the tag background visible; don't let inner buttons overwrite it */
+.calendar-view .calendar-list-day-details > summary.is-color-tagged .calendar-list-day,
+.calendar-view .calendar-list-day-details > summary.is-color-tagged .calendar-list-generate,
+.calendar-view .calendar-list-day-details > summary.is-color-tagged .calendar-list-edit-title {
+  background: transparent !important;
+}
+
+.calendar-view .calendar-list-day-details > summary.is-color-tagged .calendar-list-day:hover,
+.calendar-view .calendar-list-day-details > summary.is-color-tagged .calendar-list-day.is-active {
+  background: transparent !important;
+}
