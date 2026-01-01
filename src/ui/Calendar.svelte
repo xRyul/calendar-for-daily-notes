@@ -58,6 +58,7 @@
   import type { CalendarViewState } from "src/viewState";
   import {
     activeFile,
+    activeFilePath,
     customListTitles,
     dailyNotes,
     listItemColorTags,
@@ -2729,6 +2730,7 @@
                       {#each getCreatedNotesForItem(item) as file (file.path)}
                         <div
                           class="calendar-list-entry"
+                          class:is-active={file.path === $activeFilePath}
                           class:is-color-tagged={isListItemTagged($listItemColorTags, getListItemTagKeyForFile(file))}
                           style={getListItemTagStyle($listItemColorTags, getListItemTagKeyForFile(file))}
                           role="button"
@@ -2774,6 +2776,7 @@
                           {#each getCreatedFilesForItem(item) as file (file.path)}
                             <div
                               class="calendar-list-entry"
+                              class:is-active={file.path === $activeFilePath}
                               class:is-color-tagged={isListItemTagged($listItemColorTags, getListItemTagKeyForFile(file))}
                               style={getListItemTagStyle($listItemColorTags, getListItemTagKeyForFile(file))}
                               role="button"

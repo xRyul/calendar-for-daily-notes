@@ -21,7 +21,13 @@ import { showFileMenu } from "./ui/fileMenu";
 type CalendarComponent = InstanceType<typeof Calendar> & {
   requestListRefresh?: () => void;
 };
-import { activeFile, dailyNotes, weeklyNotes, settings } from "./ui/stores";
+import {
+  activeFile,
+  activeFilePath,
+  dailyNotes,
+  weeklyNotes,
+  settings,
+} from "./ui/stores";
 import {
   customTagsSource,
   streakSource,
@@ -397,6 +403,7 @@ export default class CalendarView extends ItemView {
       file = view.file;
     }
     activeFile.setFile(file);
+    activeFilePath.setFile(file);
   }
 
   private scheduleCalendarTick(): void {
@@ -473,6 +480,7 @@ export default class CalendarView extends ItemView {
       // File doesn't exist
       tryToCreateWeeklyNote(startOfWeek, inNewSplit, this.settings, (file) => {
         activeFile.setFile(file);
+        activeFilePath.setFile(file);
       });
       return;
     }
@@ -483,6 +491,7 @@ export default class CalendarView extends ItemView {
     await leaf.openFile(existingFile);
 
     activeFile.setFile(existingFile);
+    activeFilePath.setFile(existingFile);
     workspace.setActiveLeaf(leaf, true, true)
   }
 
@@ -500,6 +509,7 @@ export default class CalendarView extends ItemView {
         this.settings,
         (dailyNote: TFile) => {
           activeFile.setFile(dailyNote);
+          activeFilePath.setFile(dailyNote);
         }
       );
       return;
@@ -513,5 +523,6 @@ export default class CalendarView extends ItemView {
     await leaf.openFile(existingFile, { active: true, state: { mode } });
 
     activeFile.setFile(existingFile);
+    activeFilePath.setFile(existingFile);
   }
 }

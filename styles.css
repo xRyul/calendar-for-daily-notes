@@ -889,7 +889,7 @@
 }
 
 .calendar-view .calendar-list-day.is-active {
-  background: var(--background-secondary);
+  background: var(--nav-item-background-active, var(--background-secondary));
   color: var(--text-normal);
 }
 
@@ -1025,6 +1025,12 @@
 .calendar-view .calendar-list-entry:hover {
   background: var(--background-modifier-hover);
   color: var(--text-normal);
+}
+
+.calendar-view .calendar-list-entry.is-active {
+  background: var(--nav-item-background-active, var(--background-secondary));
+  color: var(--text-normal);
+  font-weight: 600;
 }
 
 .calendar-view .calendar-list-entry:focus-visible {

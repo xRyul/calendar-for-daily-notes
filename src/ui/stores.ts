@@ -143,4 +143,16 @@ function createSelectedFileStore() {
   };
 }
 
+function createActiveFilePathStore() {
+  const store = writable<string>(null);
+
+  return {
+    setFile: (file: TFile | null) => {
+      store.set(file?.path ?? null);
+    },
+    ...store,
+  };
+}
+
+export const activeFilePath = createActiveFilePathStore();
 export const activeFile = createSelectedFileStore();
