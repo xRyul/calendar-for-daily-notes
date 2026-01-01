@@ -268,6 +268,7 @@
   const listSortOrderInputId = `${ollamaIdPrefix}-list-sort-order`;
   const listMinWordsInputId = `${ollamaIdPrefix}-list-minwords`;
   const listIncludeCreatedInputId = `${ollamaIdPrefix}-list-include-created`;
+  const listShowCountsInputId = `${ollamaIdPrefix}-list-show-counts`;
   const ollamaUrlInputId = `${ollamaIdPrefix}-url`;
   const ollamaModelInputId = `${ollamaIdPrefix}-model`;
   const ollamaMaxCharsInputId = `${ollamaIdPrefix}-maxchars`;
@@ -509,6 +510,11 @@
   async function onToggleListViewIncludeCreatedDays(event: Event): Promise<void> {
     const el = event.currentTarget as HTMLInputElement;
     await writeOptions({ listViewIncludeCreatedDays: !!el?.checked });
+  }
+
+  async function onToggleListViewShowCounts(event: Event): Promise<void> {
+    const el = event.currentTarget as HTMLInputElement;
+    await writeOptions({ listViewShowCounts: !!el?.checked });
   }
 
   async function onChangeOllamaBaseUrl(event: Event): Promise<void> {
@@ -2242,7 +2248,7 @@
                     Created items
                     <span
                       class="calendar-tip"
-                      data-calendar-tooltip="Include notes & attahments created on that date (by file creation time), even if there is no daily note."
+                      data-calendar-tooltip="Include notes & attachments created on that date (by file creation time), even if there is no daily note."
                       tabindex="0"
                       on:mouseenter={onTipEnter}
                       on:mouseleave={onTipLeave}
@@ -2259,6 +2265,33 @@
                       type="checkbox"
                       checked={$settings.listViewIncludeCreatedDays}
                       on:change={onToggleListViewIncludeCreatedDays}
+                    />
+                    <span class="calendar-ollama-toggle-track" aria-hidden="true"></span>
+                  </label>
+                </div>
+
+                <div class="calendar-ollama-field">
+                  <label for={listShowCountsInputId}>
+                    Counts
+                    <span
+                      class="calendar-tip"
+                      data-calendar-tooltip="Show daily note totals on group headers, plus created notes/attachments counts on each day row."
+                      tabindex="0"
+                      on:mouseenter={onTipEnter}
+                      on:mouseleave={onTipLeave}
+                      on:focus={onTipEnter}
+                      on:blur={onTipLeave}
+                    >
+                      ?
+                    </span>
+                  </label>
+
+                  <label class="calendar-ollama-toggle" title="Show counts">
+                    <input
+                      id={listShowCountsInputId}
+                      type="checkbox"
+                      checked={$settings.listViewShowCounts}
+                      on:change={onToggleListViewShowCounts}
                     />
                     <span class="calendar-ollama-toggle-track" aria-hidden="true"></span>
                   </label>
@@ -2509,6 +2542,7 @@
           node={group}
           openState={groupOpenState}
           onToggle={onToggleGroup}
+          showCounts={$settings.listViewShowCounts}
           scrollParent={listScrollEl}
           dayOpenState={dayOpenState}
           let:items
@@ -2570,6 +2604,50 @@
                           item.dateStr}
                       </span>
                     </button>
+                  {/if}
+
+                  {#if $settings.listViewShowCounts && $settings.listViewIncludeCreatedDays}
+                    {#if item.createdNotesCount || item.createdFilesCount}
+                      <span class="calendar-list-counts">
+                        {#if item.createdNotesCount}
+                          <span
+                            class="calendar-list-count"
+                            title={`Notes: ${item.createdNotesCount}`}
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              width="14"
+                              height="14"
+                              fill="currentColor"
+                              aria-hidden="true"
+                            >
+                              <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
+                            </svg>
+                            <span class="calendar-list-count-num">{item.createdNotesCount}</span>
+                          </span>
+                        {/if}
+
+                        {#if item.createdFilesCount}
+                          <span
+                            class="calendar-list-count"
+                            title={`Attachments: ${item.createdFilesCount}`}
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              width="14"
+                              height="14"
+                              fill="currentColor"
+                              aria-hidden="true"
+                            >
+                              <path d="M16.5 6.5v9.79c0 1.93-1.57 3.5-3.5 3.5s-3.5-1.57-3.5-3.5V5c0-1.38 1.12-2.5 2.5-2.5S14.5 3.62 14.5 5v9.5c0 .55-.45 1-1 1s-1-.45-1-1V6.5H11v8c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S8 2.79 8 5v11.29c0 2.76 2.24 5 5 5s5-2.24 5-5V6.5h-1.5z" />
+                            </svg>
+                            <span class="calendar-list-count-num">{item.createdFilesCount}</span>
+                          </span>
+                        {/if}
+                      </span>
+                    {/if}
                   {/if}
 
                   {#if $settings.ollamaTitlesEnabled && item.filePath}

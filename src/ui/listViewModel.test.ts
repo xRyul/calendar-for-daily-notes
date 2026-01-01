@@ -21,6 +21,8 @@ describe("ui/listViewModel", () => {
       filePath: "",
       mtime: 0,
       dailyNoteExists: false,
+      createdNotesCount: 0,
+      createdFilesCount: 0,
     };
   };
 

@@ -15,6 +15,7 @@ export function getDefaultSettings(
       listViewIncludeCreatedDays: true,
       listViewGroupingPreset: "year",
       listViewSortOrder: "desc",
+      listViewShowCounts: false,
 
       showWeeklyNote: false,
       weeklyNoteFolder: "",

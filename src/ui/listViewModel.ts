@@ -51,6 +51,11 @@ export type ListItem = {
   filePath: string;
   mtime: number;
   dailyNoteExists: boolean;
+
+  // Created-on-day counts (by file creation time)
+  // Notes count excludes the daily note itself (if present), since it's already represented by the day row.
+  createdNotesCount: number;
+  createdFilesCount: number;
 };
 
 export type ListGroupNode = {
@@ -62,6 +67,10 @@ export type ListGroupNode = {
   groups: ListGroupNode[];
   // Leaf group items (empty for non-leaf groups)
   items: ListItem[];
+
+  // Aggregate daily note count (descendants where dailyNoteExists === true)
+  dailyNoteCount: number;
+
   // Internal: max descendant epoch for sorting by recency
   maxEpoch?: number;
 };
@@ -82,6 +91,40 @@ export function buildListItems(params: {
     parseDateStr,
     getDayDateUID,
   } = params;
+
+  const getBucket = (dateStr: string): CreatedOnDayBucket | null => {
+    if (!includeCreatedDays || !createdOnDayIndex) {
+      return null;
+    }
+    return createdOnDayIndex[dateStr] ?? null;
+  };
+
+  const countCreatedNotesExcluding = (
+    bucket: CreatedOnDayBucket | null,
+    excludePath: string
+  ): number => {
+    const notes = bucket?.notes ?? [];
+    if (!notes.length) {
+      return 0;
+    }
+    if (!excludePath) {
+      return notes.length;
+    }
+
+    // Subtract the daily note itself if it is present in the created-on-day notes list.
+    let count = notes.length;
+    for (const f of notes) {
+      if (f?.path === excludePath) {
+        count -= 1;
+        break;
+      }
+    }
+    return Math.max(0, count);
+  };
+
+  const countCreatedFiles = (bucket: CreatedOnDayBucket | null): number => {
+    return bucket?.files?.length ?? 0;
+  };
 
   const byDate = new Map<string, DailyNoteCandidate>();
   for (const candidate of dailyNoteCandidates) {
@@ -118,6 +161,8 @@ export function buildListItems(params: {
     const candidate = byDate.get(dateStr);
 
     if (candidate) {
+      const bucket = getBucket(candidate.dateStr);
+
       items.push({
         date: candidate.date,
         dateUID: candidate.dateUID,
@@ -129,6 +174,9 @@ export function buildListItems(params: {
         filePath: candidate.filePath,
         mtime: candidate.mtime,
         dailyNoteExists: true,
+
+        createdNotesCount: countCreatedNotesExcluding(bucket, candidate.filePath),
+        createdFilesCount: countCreatedFiles(bucket),
       });
       continue;
     }
@@ -138,6 +186,8 @@ export function buildListItems(params: {
     if (!date?.isValid?.()) {
       continue;
     }
+
+    const bucket = getBucket(dateStr);
 
     items.push({
       date,
@@ -150,6 +200,9 @@ export function buildListItems(params: {
       filePath: "",
       mtime: 0,
       dailyNoteExists: false,
+
+      createdNotesCount: countCreatedNotesExcluding(bucket, ""),
+      createdFilesCount: countCreatedFiles(bucket),
     });
   }
 
@@ -260,8 +313,12 @@ export function getListGroupIdPathForDate(
   return path;
 }
 
-type ListGroupNodeInternal = Omit<ListGroupNode, "groups"> & {
+type ListGroupNodeInternal = {
+  id: string;
+  label: string;
   children: Map<string, ListGroupNodeInternal>;
+  items: ListItem[];
+  maxEpoch?: number;
 };
 
 export function buildListGroups(
@@ -331,12 +388,17 @@ export function buildListGroups(
       ? []
       : node.items.slice().sort(compareItemByEpoch);
 
+    const dailyNoteCount = groups.length
+      ? groups.reduce((sum, g) => sum + (g.dailyNoteCount ?? 0), 0)
+      : node.items.reduce((sum, item) => sum + (item.dailyNoteExists ? 1 : 0), 0);
+
     return {
       id: node.id,
       label: node.label,
       groups,
       // Only leaf groups should carry items.
       items: sortedItems,
+      dailyNoteCount,
       maxEpoch: node.maxEpoch,
     };
   };

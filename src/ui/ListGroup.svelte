@@ -5,6 +5,7 @@
   export let node: ListGroupNode;
   export let openState: Record<string, boolean> = {};
   export let onToggle: (id: string, event: Event) => void = () => {};
+  export let showCounts = false;
 
   // Virtualization (windowing) for leaf groups with many day rows.
   // This keeps DOM size bounded while scrolling large histories.
@@ -234,23 +235,32 @@
         <path d="M8 5v14l11-7-11-7z"></path>
       </svg>
     </span>
-    {node.label}
+    <span class="calendar-list-group-label">{node.label}</span>
+    {#if showCounts}
+      <span
+        class="calendar-list-group-count"
+        title={`Daily notes: ${node.dailyNoteCount}`}
+      >
+        {node.dailyNoteCount}
+      </span>
+    {/if}
   </summary>
 
   {#if openState[node.id]}
     <div class="calendar-list-days">
       {#if node.groups?.length}
         {#each node.groups as child (child.id)}
-          <svelte:self
-            node={child}
-            {openState}
-            {onToggle}
-            {scrollParent}
-            {dayOpenState}
-            {virtualize}
-            {virtualMinItems}
-            {virtualOverscan}
-          >
+            <svelte:self
+              node={child}
+              {openState}
+              {onToggle}
+              {showCounts}
+              {scrollParent}
+              {dayOpenState}
+              {virtualize}
+              {virtualMinItems}
+              {virtualOverscan}
+            >
             <svelte:fragment let:items>
               <slot {items} />
             </svelte:fragment>

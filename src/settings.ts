@@ -24,6 +24,7 @@ export interface ISettings {
   listViewIncludeCreatedDays: boolean;
   listViewGroupingPreset: ListViewGroupingPreset;
   listViewSortOrder: ListViewSortOrder;
+  listViewShowCounts: boolean;
 
   // Weekly Note settings
   showWeeklyNote: boolean;
@@ -65,6 +66,7 @@ export const defaultSettings = Object.freeze({
   listViewIncludeCreatedDays: true,
   listViewGroupingPreset: "year" as ListViewGroupingPreset,
   listViewSortOrder: "desc" as ListViewSortOrder,
+  listViewShowCounts: false,
 
   showWeeklyNote: false,
   weeklyNoteFormat: "",
