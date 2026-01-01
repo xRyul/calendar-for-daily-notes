@@ -403,6 +403,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  cursor: pointer;
 }
 
 .calendar-ollama-menu .calendar-ollama-toggle input {

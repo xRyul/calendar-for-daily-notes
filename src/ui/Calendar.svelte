@@ -88,7 +88,23 @@
   let viewStateHydrated = false;
 
   let calendarBaseWrapperEl: HTMLDivElement | null = null;
+  let calendarZoomEl: HTMLDivElement | null = null;
   let listScrollEl: HTMLDivElement | null = null;
+
+  let calendarZoomScale = 1;
+  let listViewZoomScale = 1;
+
+  function normalizeZoomPercent(raw: unknown, fallback: number): number {
+    const n = typeof raw === "number" ? raw : Number(raw);
+    if (!Number.isFinite(n)) {
+      return fallback;
+    }
+    // Keep within sane bounds even if the saved data gets edited manually.
+    return Math.max(25, Math.min(400, Math.round(n)));
+  }
+
+  $: calendarZoomScale = normalizeZoomPercent($settings?.calendarZoom, 100) / 100;
+  $: listViewZoomScale = normalizeZoomPercent($settings?.listViewZoom, 100) / 100;
 
   // Inserted into the Calendar header (nav) after mount.
   let listControlsEl: HTMLDivElement | null = null;
@@ -603,7 +619,7 @@
   const CALENDAR_SCALE_MIN = CALENDAR_SCALE_MIN_WIDTH_PX / CALENDAR_SCALE_FULL_WIDTH_PX;
 
   function updateCalendarScale(): void {
-    if (!calendarBaseWrapperEl) {
+    if (!calendarBaseWrapperEl || !calendarZoomEl) {
       return;
     }
 
@@ -612,14 +628,31 @@
       return;
     }
 
-    const raw = width / CALENDAR_SCALE_FULL_WIDTH_PX;
-    const scale = width < CALENDAR_SCALE_FULL_WIDTH_PX
-      ? Math.max(CALENDAR_SCALE_MIN, Math.min(1, raw))
+    // Base responsive fit-to-width scale (<= 1). This keeps all 7 columns visible
+    // in narrow panes by default, but can be overridden by the user zoom setting.
+    const fitScale = width / CALENDAR_SCALE_FULL_WIDTH_PX;
+    const responsiveScale = width < CALENDAR_SCALE_FULL_WIDTH_PX
+      ? Math.max(CALENDAR_SCALE_MIN, Math.min(1, fitScale))
       : 1;
 
+    // User zoom is applied on top of the responsive scale.
+    // Example: if responsiveScale is 0.70 in a narrow sidebar, and the user sets 200%,
+    // the final zoom becomes ~1.40 and the calendar will overflow/scroll horizontally.
+    const finalScale = responsiveScale * calendarZoomScale;
+
     // Round a little to avoid thrashing on sub-pixel changes.
-    const rounded = Math.round(scale * 1000) / 1000;
-    calendarBaseWrapperEl.style.setProperty("--calendar-scale", String(rounded));
+    const rounded = Math.round(finalScale * 1000) / 1000;
+
+    // Use `zoom` (supported in Obsidian/Electron) so layout metrics + pointer events behave.
+    calendarZoomEl.style.setProperty("zoom", String(rounded));
+  }
+
+  // Ensure zoom updates when settings change (not just on resize observers).
+  $: if (calendarBaseWrapperEl && calendarZoomEl) {
+    // Make zoom reactive to the user setting.
+    // (Svelte tracks dependencies by variable access, not by what a function reads.)
+    calendarZoomScale;
+    updateCalendarScale();
   }
 
 
@@ -801,6 +834,40 @@
     } else {
       openList();
     }
+  }
+
+  function revealDateInList(date: Moment): void {
+    // Ensure List view is visible.
+    // Note: We set open state first so the initial compute (when opening) uses it.
+    const groupingPreset = normalizeListViewGroupingPreset(
+      $settings.listViewGroupingPreset
+    );
+    const groupPath = getListGroupIdPathForDate(date, groupingPreset);
+
+    const nextGroupOpenState: Record<string, boolean> = { ...groupOpenState };
+    for (const id of groupPath) {
+      nextGroupOpenState[id] = true;
+    }
+    groupOpenState = nextGroupOpenState;
+
+    const dateUID = getDateUID(date, "day");
+    const nextDayOpenState: Record<string, boolean> = {
+      ...(dayOpenState ?? {}),
+      [dateUID]: true,
+    };
+    dayOpenState = nextDayOpenState;
+
+    schedulePersistViewState({
+      groupOpenState: nextGroupOpenState,
+      dayOpenState: nextDayOpenState,
+    });
+
+    openList();
+  }
+
+  function onClickDayFromCalendar(date: Moment, isMetaPressed: boolean): boolean {
+    revealDateInList(date);
+    return onClickDay(date, isMetaPressed);
   }
 
   function scheduleListRecompute(): void {
@@ -2034,20 +2101,22 @@
 <div class="calendar-view">
   <div class="calendar-pane">
     <div class="calendar-base-wrapper" bind:this={calendarBaseWrapperEl}>
-      <CalendarBase
-        {sources}
-        {today}
-        {onHoverDay}
-        {onHoverWeek}
-        {onContextMenuDay}
-        {onContextMenuWeek}
-        {onClickDay}
-        {onClickWeek}
-        bind:displayedMonth
-        localeData={today.localeData()}
-        selectedId={$activeFile}
-        showWeekNums={$settings.showWeeklyNote}
-      />
+      <div class="calendar-ui-zoom" bind:this={calendarZoomEl}>
+        <CalendarBase
+          {sources}
+          {today}
+          {onHoverDay}
+          {onHoverWeek}
+          {onContextMenuDay}
+          {onContextMenuWeek}
+          onClickDay={onClickDayFromCalendar}
+          {onClickWeek}
+          bind:displayedMonth
+          localeData={today.localeData()}
+          selectedId={$activeFile}
+          showWeekNums={$settings.showWeeklyNote}
+        />
+      </div>
 
       <div
         class="calendar-list-controls"
@@ -2517,19 +2586,20 @@
       bind:this={listScrollEl}
       transition:slide={{ duration: 140 }}
     >
-      {#if listLoading}
-        <div class="calendar-list-status">Loading…</div>
-      {:else if listError}
-        <div class="calendar-list-error">{listError}</div>
-      {:else if listGroups.length === 0}
-        <div class="calendar-list-empty">
-          {$settings.listViewIncludeCreatedDays
-            ? "No daily notes or created items."
-            : "No daily notes."}
-        </div>
-      {/if}
+      <div class="calendar-list-zoom" style={`zoom: ${listViewZoomScale};`}>
+        {#if listLoading}
+          <div class="calendar-list-status">Loading…</div>
+        {:else if listError}
+          <div class="calendar-list-error">{listError}</div>
+        {:else if listGroups.length === 0}
+          <div class="calendar-list-empty">
+            {$settings.listViewIncludeCreatedDays
+              ? "No daily notes or created items."
+              : "No daily notes."}
+          </div>
+        {/if}
 
-      {#each listGroups as group (group.id)}
+        {#each listGroups as group (group.id)}
         <ListGroup
           node={group}
           openState={groupOpenState}
@@ -2803,6 +2873,7 @@
           {/each}
         </ListGroup>
       {/each}
+      </div>
     </div>
   {/if}
 </div>

@@ -9,6 +9,8 @@ export function getDefaultSettings(
       weekStart: "sunday",
       shouldConfirmBeforeCreate: false,
       rememberViewState: false,
+      calendarZoom: 130,
+      listViewZoom: 95,
       wordsPerDot: 50,
 
       listViewMinWords: 0,

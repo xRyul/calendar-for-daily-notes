@@ -19,6 +19,10 @@ export interface ISettings {
   // UI state
   rememberViewState: boolean;
 
+  // UI sizing
+  calendarZoom: number;
+  listViewZoom: number;
+
   // List view settings
   listViewMinWords: number;
   listViewIncludeCreatedDays: boolean;
@@ -59,6 +63,10 @@ export const defaultSettings = Object.freeze({
 
   // Persist UI state across restarts (list view open, displayed month, list toggles)
   rememberViewState: false,
+
+  // UI sizing (100 = 100%, 80 = 80%, etc.)
+  calendarZoom: 130,
+  listViewZoom: 95,
 
   wordsPerDot: DEFAULT_WORDS_PER_DOT,
 
@@ -121,6 +129,12 @@ export class CalendarSettingsTab extends PluginSettingTab {
     this.addConfirmCreateSetting();
     this.addRememberViewStateSetting();
     this.addShowWeeklyNoteSetting();
+
+    this.containerEl.createEl("h3", {
+      text: "UI Sizing",
+    });
+    this.addCalendarZoomSetting();
+    this.addListViewZoomSetting();
 
     if (
       this.plugin.options.showWeeklyNote &&
@@ -267,6 +281,36 @@ export class CalendarSettingsTab extends PluginSettingTab {
         textfield.onChange(async (value) => {
           this.plugin.writeOptions(() => ({ weeklyNoteFolder: value }));
         });
+      });
+  }
+
+  addCalendarZoomSetting(): void {
+    new Setting(this.containerEl)
+      .setName("Calendar zoom")
+      .setDesc("Adjust calendar size (50-200%, default 130%)")
+      .addSlider((slider) => {
+        slider
+          .setLimits(50, 200, 5)
+          .setValue(this.plugin.options.calendarZoom)
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            this.plugin.writeOptions(() => ({ calendarZoom: value }));
+          });
+      });
+  }
+
+  addListViewZoomSetting(): void {
+    new Setting(this.containerEl)
+      .setName("List view zoom")
+      .setDesc("Adjust list view text size (50-200%, default 95%)")
+      .addSlider((slider) => {
+        slider
+          .setLimits(50, 200, 5)
+          .setValue(this.plugin.options.listViewZoom)
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            this.plugin.writeOptions(() => ({ listViewZoom: value }));
+          });
       });
   }
 
