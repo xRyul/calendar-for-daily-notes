@@ -2,7 +2,7 @@
   "id": "calendar-for-daily-notes",
   "name": "Calendar for Daily Notes",
   "description": "Calendar for daily notes with grouped lists, created-on-day notes and attachments, color tags, custom titles, and optional gemma3 title generation.",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "author": "xRyul",
   "authorUrl": "https://github.com/xRyul",
   "fundingUrl": "https://ko-fi.com/xryul",
