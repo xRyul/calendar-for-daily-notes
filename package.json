@@ -1,8 +1,8 @@
 {
-  "name": "calendar",
+  "name": "daily-note-calendar",
   "version": "2.0.4",
-  "description": "Calendar view of your daily notes",
-  "author": "Liam Cain (fork by xRyul)",
+  "description": "Calendar for daily notes with grouped lists, created-on-day notes and attachments, color tags, custom titles, and optional gemma3 title generation.",
+  "author": "xRyul (original by Liam Cain)",
   "main": "main.js",
   "license": "MIT",
   "scripts": {
@@ -10,7 +10,7 @@
     "build": "npm run lint && rollup -c",
     "postbuild": "node scripts/deploy-to-vault.js",
     "test": "jest --passWithNoTests",
-    "test:watch": "yarn test -- --watch"
+    "test:watch": "npm run test -- -- --watch"
   },
   "dependencies": {
     "obsidian": "obsidianmd/obsidian-api#master",

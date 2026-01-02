@@ -1,11 +1,11 @@
 {
-  "id": "calendar",
-  "name": "Calendar",
-  "description": "Calendar view of your daily notes",
+  "id": "daily-note-calendar",
+  "name": "Daily Note Calendar",
+  "description": "Calendar for daily notes with grouped lists, created-on-day notes and attachments, color tags, custom titles, and optional gemma3 title generation.",
   "version": "2.0.4",
-  "author": "Liam Cain (fork by xRyul)",
-  "authorUrl": "https://github.com/liamcain/",
-  "fundingUrl": "https://www.buymeacoffee.com/liamcain",
+  "author": "xRyul (original by Liam Cain)",
+  "authorUrl": "https://github.com/xRyul",
+  "fundingUrl": "https://ko-fi.com/xryul",
   "isDesktopOnly": false,
   "minAppVersion": "0.9.11"
 }

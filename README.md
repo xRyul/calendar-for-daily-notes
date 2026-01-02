@@ -1,7 +1,5 @@
-# Calendar
-
-Fork of [Liam Cain’s **Calendar**](https://github.com/liamcain/obsidian-calendar-plugin) plugin for Obsidian.
-
+# Daily Note Calendar
+Calendar for daily notes with grouped lists, created-on-day notes and attachments, color tags, custom titles, and optional gemma3 title generation.
 ![Obsidian_NGf9Of9P0m](https://github.com/user-attachments/assets/2a644979-e9d7-40d7-983a-504801d79875)
 
 ### What’s different:
@@ -39,3 +37,13 @@ Fork of [Liam Cain’s **Calendar**](https://github.com/liamcain/obsidian-calend
     - Zoom controls: Separate zoom sliders for calendar (default 130%) and list view (default 95%)
     - Remember view state: Optional persistence of displayed month, list open/closed state, and expanded groups across restarts
     - Responsive scaling: Calendar auto-scales in narrow sidebars
+
+## Network & privacy
+- Title generation is optional, and sends note text only to your **local Ollama** server (`http://127.0.0.1:11434` by default).
+- The plugin itself only talks to that local endpoint. When you click **Pull** (or generate titles without the model present), your Ollama server will download `gemma3:4b` from its configured registry (internet) just like `ollama pull gemma3:4b` on the CLI.
+- Disable title generation in settings to avoid any Ollama requests.
+- Generated titles are cached per file mtime; content isn’t re-sent unless the note changes.
+
+## Credit
+
+Fork of [Liam Cain’s **Calendar**](https://github.com/liamcain/obsidian-calendar-plugin) plugin for Obsidian.
