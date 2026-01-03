@@ -19,8 +19,8 @@ export function partition(
   arr: string[],
   predicate: (elem: string) => boolean
 ): [string[], string[]] {
-  const pass = [];
-  const fail = [];
+  const pass: string[] = [];
+  const fail: string[] = [];
 
   arr.forEach((elem) => {
     if (predicate(elem)) {
@@ -44,7 +44,7 @@ export function getDateUIDFromFile(
   file: TFile | null,
   dailyNotesRecord?: Record<string, TFile> | null,
   weeklyNotesRecord?: Record<string, TFile> | null
-): string {
+): string | null {
   if (!file) {
     return null;
   }

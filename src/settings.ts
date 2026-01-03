@@ -1,8 +1,5 @@
-import {
-  App,
-  PluginSettingTab,
-  Setting,
-} from "obsidian";
+import { PluginSettingTab, Setting } from "obsidian";
+import type { App } from "obsidian";
 import { appHasDailyNotesPluginLoaded } from "obsidian-daily-notes-interface";
 import type { ILocaleOverride, IWeekStartOption } from "obsidian-calendar-ui";
 
@@ -91,12 +88,46 @@ export const defaultSettings = Object.freeze({
   ollamaTitleCacheMaxEntries: 1000,
 });
 
-export function appHasPeriodicNotesPluginLoaded(): boolean {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const periodicNotes = (<any>window.app).plugins.getPlugin("periodic-notes");
-  return periodicNotes && periodicNotes.settings?.weekly?.enabled;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
+type PluginsLike = {
+  getPlugin: (id: string) => unknown;
+};
+
+function isPluginsLike(value: unknown): value is PluginsLike {
+  return isRecord(value) && typeof value["getPlugin"] === "function";
+}
+
+export function appHasPeriodicNotesPluginLoaded(app: App): boolean {
+  const appRecord = app as unknown;
+  if (!isRecord(appRecord)) {
+    return false;
+  }
+
+  const plugins = appRecord["plugins"];
+  if (!isPluginsLike(plugins)) {
+    return false;
+  }
+
+  const plugin = plugins.getPlugin("periodic-notes");
+  if (!isRecord(plugin)) {
+    return false;
+  }
+
+  const settings = plugin["settings"];
+  if (!isRecord(settings)) {
+    return false;
+  }
+
+  const weekly = settings["weekly"];
+  if (!isRecord(weekly)) {
+    return false;
+  }
+
+  return weekly["enabled"] === true;
+}
 export class CalendarSettingsTab extends PluginSettingTab {
   private plugin: CalendarPlugin;
 
@@ -110,52 +141,44 @@ export class CalendarSettingsTab extends PluginSettingTab {
 
     if (!appHasDailyNotesPluginLoaded()) {
       this.containerEl.createDiv("settings-banner", (banner) => {
-        banner.createEl("h3", {
-          text: "⚠️ Daily notes plugin not enabled",
-        });
-        banner.createEl("p", {
-          cls: "setting-item-description",
-          text:
-            "The calendar is best used in conjunction with either the Daily notes plugin or the Periodic Notes plugin (available in the Community plugins catalog).",
-        });
+        new Setting(banner)
+          .setName("Daily notes plugin is not enabled")
+          .setDesc(
+            "The calendar is best used in conjunction with either the daily notes plugin or the periodic notes plugin (available in the community plugins catalog)."
+          )
+          .setHeading();
       });
     }
 
-    this.containerEl.createEl("h3", {
-      text: "General settings",
-    });
+    new Setting(this.containerEl).setName("Basic configuration").setHeading();
     this.addDotThresholdSetting();
     this.addWeekStartSetting();
     this.addConfirmCreateSetting();
     this.addRememberViewStateSetting();
     this.addShowWeeklyNoteSetting();
 
-    this.containerEl.createEl("h3", {
-      text: "UI sizing",
-    });
+    new Setting(this.containerEl).setName("UI sizing").setHeading();
     this.addCalendarZoomSetting();
     this.addListViewZoomSetting();
 
     if (
       this.plugin.options.showWeeklyNote &&
-      !appHasPeriodicNotesPluginLoaded()
+      !appHasPeriodicNotesPluginLoaded(this.app)
     ) {
-      this.containerEl.createEl("h3", {
-        text: "Weekly note settings",
-      });
+      new Setting(this.containerEl)
+        .setName("Weekly notes")
+        .setHeading();
       this.containerEl.createEl("p", {
         cls: "setting-item-description",
         text:
-          "Note: Weekly note settings are moving. You are encouraged to install the 'Periodic Notes' plugin to keep the functionality in the future.",
+          "Weekly note settings are moving. Install the 'periodic notes' plugin to keep this functionality in the future.",
       });
       this.addWeeklyNoteFormatSetting();
       this.addWeeklyNoteTemplateSetting();
       this.addWeeklyNoteFolderSetting();
     }
 
-    this.containerEl.createEl("h3", {
-      text: "Advanced settings",
-    });
+    new Setting(this.containerEl).setName("Advanced").setHeading();
     this.addLocaleOverrideSetting();
 
   }
@@ -190,7 +213,7 @@ export class CalendarSettingsTab extends PluginSettingTab {
     new Setting(this.containerEl)
       .setName("Start week on:")
       .setDesc(
-        "Choose what day of the week to start. Select 'Locale default' to use the default specified by moment.js"
+        "Choose what day of the week to start. Select 'locale default' to use the default specified by moment.js"
       )
       .addDropdown((dropdown) => {
         dropdown.addOption("locale", `Locale default (${localeWeekStart})`);
@@ -376,7 +399,7 @@ export class CalendarSettingsTab extends PluginSettingTab {
         dropdown.onChange((value) => {
           void this.plugin
             .writeOptions(() => ({
-              localeOverride: value as ILocaleOverride,
+              localeOverride: value,
             }))
             .catch((err) =>
               console.error("[Calendar] Failed to update locale override", err)

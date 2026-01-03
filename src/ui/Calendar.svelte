@@ -1,13 +1,12 @@
 <svelte:options immutable />
 
 <script lang="ts">
-  import {
-    Calendar as CalendarBase,
-    configureGlobalMomentLocale,
-  } from "obsidian-calendar-ui";
+  import { configureGlobalMomentLocale } from "obsidian-calendar-ui";
+  import LegacyCalendarBase from "./LegacyCalendarBase.svelte";
   import type { ICalendarSource } from "obsidian-calendar-ui";
+  import type { Moment } from "moment";
   import { onDestroy, onMount, tick as svelteTick } from "svelte";
-  import { slide } from "svelte/transition";
+  import { slide, type SlideParams, type TransitionConfig } from "svelte/transition";
   import { Menu, Notice, TFile } from "obsidian";
   import type { EventRef } from "obsidian";
   import { getDateFromFile, getDateUID } from "obsidian-daily-notes-interface";
@@ -68,18 +67,17 @@
   } from "./stores";
   import { getWordCount as getWordCountFromFile } from "./noteMetrics";
 
-  type Moment = ReturnType<Window["moment"]>;
-
-  let today: Moment;
+  // Initialize immediately so downstream code (bindings, localeData, heartbeat) never sees `undefined`.
+  let today: Moment = window.moment();
 
   $: today = getToday($settings);
 
   export let displayedMonth: Moment = today;
   export let sources: ICalendarSource[];
-  export let onHoverDay: (date: Moment, targetEl: EventTarget) => boolean;
-  export let onHoverWeek: (date: Moment, targetEl: EventTarget) => boolean;
-  export let onClickDay: (date: Moment, isMetaPressed: boolean) => boolean;
-  export let onClickWeek: (date: Moment, isMetaPressed: boolean) => boolean;
+  export let onHoverDay: (date: Moment, targetEl: EventTarget) => void;
+  export let onHoverWeek: (date: Moment, targetEl: EventTarget) => void;
+  export let onClickDay: (date: Moment, isMetaPressed: boolean) => void;
+  export let onClickWeek: (date: Moment, isMetaPressed: boolean) => void;
   export let onContextMenuDay: (date: Moment, event: MouseEvent) => boolean;
   export let onContextMenuWeek: (date: Moment, event: MouseEvent) => boolean;
 
@@ -133,6 +131,23 @@
     return {
       // IMPORTANT: do not remove the node here. Svelte will detach it during teardown.
       destroy() {},
+    };
+  }
+
+  /**
+   * `slide()` sometimes produces NaN-based keyframes (e.g. `height: NaNpx`) when an element
+   * is measured while detached / display:none / mid-portal. Browsers warn noisily.
+   * This wrapper sanitizes those keyframes so the animation becomes a no-op instead of spamming the console.
+   */
+  function safeSlide(node: Element, params?: SlideParams): TransitionConfig {
+    const cfg = slide(node, params);
+    if (!cfg.css) {
+      return cfg;
+    }
+
+    return {
+      ...cfg,
+      css: (t, u) => cfg.css!(t, u).replace(/NaNpx/g, "0px"),
     };
   }
 
@@ -867,9 +882,9 @@
     openList();
   }
 
-  function onClickDayFromCalendar(date: Moment, isMetaPressed: boolean): boolean {
+  function onClickDayFromCalendar(date: Moment, isMetaPressed: boolean): void {
     revealDateInList(date);
-    return onClickDay(date, isMetaPressed);
+    onClickDay(date, isMetaPressed);
   }
 
   function scheduleListRecompute(): void {
@@ -1864,6 +1879,10 @@
     }
   }
 
+  export function setDisplayedMonth(month: Moment): void {
+    displayedMonth = month;
+  }
+
   export function tick() {
     today = window.moment();
   }
@@ -1879,11 +1898,20 @@
   let heartbeat = setInterval(() => {
     tick();
 
-    const isViewingCurrentMonth = displayedMonth.isSame(today, "day");
+    // Extremely defensive: avoid transient undefined/invalid values during mount/unmount.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dm: any = displayedMonth;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const t: any = today;
+    if (!dm || !t || typeof dm.isSame !== "function" || typeof t.isSame !== "function") {
+      return;
+    }
+
+    const isViewingCurrentMonth = dm.isSame(t, "day");
     if (isViewingCurrentMonth) {
       // if it's midnight on the last day of the month, this will
       // update the display to show the new month.
-      displayedMonth = today;
+      displayedMonth = t;
     }
   }, 1000 * 60);
 
@@ -2107,7 +2135,7 @@
   <div class="calendar-pane">
     <div class="calendar-base-wrapper" bind:this={calendarBaseWrapperEl}>
       <div class="calendar-ui-zoom" bind:this={calendarZoomEl} style={`zoom: ${calendarFinalZoom};`}>
-        <CalendarBase
+        <LegacyCalendarBase
           {sources}
           {today}
           {onHoverDay}
@@ -2194,7 +2222,7 @@
               use:portalToBody
               style={`top: ${ollamaMenuTop}px; left: ${ollamaMenuLeft}px; max-height: ${ollamaMenuMaxHeight}px;`}
               on:scroll={() => hideTooltip()}
-              transition:slide={{ duration: 120 }}
+              transition:safeSlide={{ duration: 120 }}
             >
               <div class="calendar-ollama-menu-row calendar-ollama-menu-row--top">
                 <div class="calendar-ollama-menu-title">
@@ -2206,17 +2234,18 @@
                 <div class="calendar-ollama-field">
                   <label for={listGroupingPresetInputId}>
                     Grouping
-                    <span
+                    <button
                       class="calendar-tip"
+                      type="button"
+                      aria-label="Help: Choose how list items are grouped (e.g., Year → month)."
                       data-calendar-tooltip="Choose how list items are grouped (e.g., Year → month)."
-                      tabindex="0"
                       on:mouseenter={onTipEnter}
                       on:mouseleave={onTipLeave}
                       on:focus={onTipEnter}
                       on:blur={onTipLeave}
                     >
                       ?
-                    </span>
+                    </button>
                   </label>
                   <div class="calendar-select">
                     <select
@@ -2249,17 +2278,18 @@
                 <div class="calendar-ollama-field">
                   <label for={listSortOrderInputId}>
                     Order
-                    <span
+                    <button
                       class="calendar-tip"
+                      type="button"
+                      aria-label="Help: Choose whether groups/days are shown newest-first or oldest-first."
                       data-calendar-tooltip="Choose whether groups/days are shown newest-first or oldest-first."
-                      tabindex="0"
                       on:mouseenter={onTipEnter}
                       on:mouseleave={onTipLeave}
                       on:focus={onTipEnter}
                       on:blur={onTipLeave}
                     >
                       ?
-                    </span>
+                    </button>
                   </label>
                   <div class="calendar-select">
                     <select
@@ -2288,17 +2318,18 @@
                 <div class="calendar-ollama-field">
                   <label for={listMinWordsInputId}>
                     Min words
-                    <span
+                    <button
                       class="calendar-tip"
+                      type="button"
+                      aria-label="Help: Hide days whose daily note has fewer than this many words (0 = show all)."
                       data-calendar-tooltip="Hide days whose daily note has fewer than this many words (0 = show all)."
-                      tabindex="0"
                       on:mouseenter={onTipEnter}
                       on:mouseleave={onTipLeave}
                       on:focus={onTipEnter}
                       on:blur={onTipLeave}
                     >
                       ?
-                    </span>
+                    </button>
                   </label>
                   <input
                     id={listMinWordsInputId}
@@ -2312,17 +2343,18 @@
                 <div class="calendar-ollama-field">
                   <label for={listIncludeCreatedInputId}>
                     Created items
-                    <span
+                    <button
                       class="calendar-tip"
+                      type="button"
+                      aria-label="Help: Include notes and attachments created on that date (by file creation time), even if there is no daily note."
                       data-calendar-tooltip="Include notes & attachments created on that date (by file creation time), even if there is no daily note."
-                      tabindex="0"
                       on:mouseenter={onTipEnter}
                       on:mouseleave={onTipLeave}
                       on:focus={onTipEnter}
                       on:blur={onTipLeave}
                     >
                       ?
-                    </span>
+                    </button>
                   </label>
 
                   <label class="calendar-ollama-toggle" title="Include created-on-day items">
@@ -2339,17 +2371,18 @@
                 <div class="calendar-ollama-field">
                   <label for={listShowCountsInputId}>
                     Counts
-                    <span
+                    <button
                       class="calendar-tip"
+                      type="button"
+                      aria-label="Help: Show daily note totals on group headers, plus created notes and attachments counts on each day row."
                       data-calendar-tooltip="Show daily note totals on group headers, plus created notes/attachments counts on each day row."
-                      tabindex="0"
                       on:mouseenter={onTipEnter}
                       on:mouseleave={onTipLeave}
                       on:focus={onTipEnter}
                       on:blur={onTipLeave}
                     >
                       ?
-                    </span>
+                    </button>
                   </label>
 
                   <label class="calendar-ollama-toggle" title="Show counts">
@@ -2368,17 +2401,18 @@
                 <div class="calendar-ollama-menu-row">
                   <div class="calendar-ollama-menu-title">
                     <span>Ollama</span>
-                    <span
+                    <button
                       class="calendar-tip"
+                      type="button"
+                      aria-label="Help: Toggle on to enable local Ollama for list title generation (no file renames)."
                       data-calendar-tooltip="Toggle on to enable local Ollama for list title generation (no file renames)."
-                      tabindex="0"
                       on:mouseenter={onTipEnter}
                       on:mouseleave={onTipLeave}
                       on:focus={onTipEnter}
                       on:blur={onTipLeave}
                     >
                       i
-                    </span>
+                    </button>
                   </div>
 
                   <label class="calendar-ollama-toggle" title="Enable / disable">
@@ -2396,17 +2430,18 @@
                     <div class="calendar-ollama-field">
                       <label for={ollamaUrlInputId}>
                         URL
-                        <span
+                        <button
                           class="calendar-tip"
+                          type="button"
+                          aria-label="Help: Usually http://127.0.0.1:11434"
                           data-calendar-tooltip="Usually http://127.0.0.1:11434"
-                          tabindex="0"
                           on:mouseenter={onTipEnter}
                           on:mouseleave={onTipLeave}
                           on:focus={onTipEnter}
                           on:blur={onTipLeave}
                         >
                           ?
-                        </span>
+                        </button>
                       </label>
                       <input
                         id={ollamaUrlInputId}
@@ -2420,17 +2455,18 @@
                     <div class="calendar-ollama-field">
                       <label for={ollamaModelInputId}>
                         Model
-                        <span
+                        <button
                           class="calendar-tip"
+                          type="button"
+                          aria-label="Help: e.g. gemma3:4b"
                           data-calendar-tooltip="e.g. gemma3:4b"
-                          tabindex="0"
                           on:mouseenter={onTipEnter}
                           on:mouseleave={onTipLeave}
                           on:focus={onTipEnter}
                           on:blur={onTipLeave}
                         >
                           ?
-                        </span>
+                        </button>
                       </label>
                       <input
                         id={ollamaModelInputId}
@@ -2444,17 +2480,18 @@
                     <div class="calendar-ollama-field">
                       <label for={ollamaMaxCharsInputId}>
                         Max chars
-                        <span
+                        <button
                           class="calendar-tip"
+                          type="button"
+                          aria-label="Help: Truncates note text"
                           data-calendar-tooltip="Truncates note text"
-                          tabindex="0"
                           on:mouseenter={onTipEnter}
                           on:mouseleave={onTipLeave}
                           on:focus={onTipEnter}
                           on:blur={onTipLeave}
                         >
                           ?
-                        </span>
+                        </button>
                       </label>
                       <input
                         id={ollamaMaxCharsInputId}
@@ -2468,17 +2505,18 @@
                     <div class="calendar-ollama-field">
                       <label for={ollamaTimeoutInputId}>
                         Timeout
-                        <span
+                        <button
                           class="calendar-tip"
+                          type="button"
+                          aria-label="Help: ms (status + generate)"
                           data-calendar-tooltip="ms (status + generate)"
-                          tabindex="0"
                           on:mouseenter={onTipEnter}
                           on:mouseleave={onTipLeave}
                           on:focus={onTipEnter}
                           on:blur={onTipLeave}
                         >
                           ?
-                        </span>
+                        </button>
                       </label>
                       <input
                         id={ollamaTimeoutInputId}
@@ -2492,17 +2530,18 @@
                     <div class="calendar-ollama-field">
                       <label for={ollamaCacheInputId}>
                         Cache
-                        <span
+                        <button
                           class="calendar-tip"
+                          type="button"
+                          aria-label="Help: Max saved titles"
                           data-calendar-tooltip="Max saved titles"
-                          tabindex="0"
                           on:mouseenter={onTipEnter}
                           on:mouseleave={onTipLeave}
                           on:focus={onTipEnter}
                           on:blur={onTipLeave}
                         >
                           ?
-                        </span>
+                        </button>
                       </label>
                       <input
                         id={ollamaCacheInputId}
@@ -2589,7 +2628,7 @@
     <div
       class="calendar-pane calendar-list-view"
       bind:this={listScrollEl}
-      transition:slide={{ duration: 140 }}
+      transition:safeSlide={{ duration: 140 }}
     >
       <div class="calendar-list-zoom" style={`zoom: ${listViewZoomScale};`}>
         {#if listLoading}
@@ -2633,6 +2672,7 @@
                 </span>
                 <div class="calendar-list-row">
                   {#if editingCustomTitleDateUID === item.dateUID}
+                    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
                     <div
                       class="calendar-list-day-editor"
                       on:click|stopPropagation

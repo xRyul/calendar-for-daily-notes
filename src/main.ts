@@ -19,7 +19,7 @@ import {
   appHasPeriodicNotesPluginLoaded,
   CalendarSettingsTab,
   defaultSettings,
-  ISettings,
+  type ISettings,
 } from "./settings";
 import CalendarView from "./view";
 import {
@@ -55,6 +55,10 @@ type PluginDataV3 = {
   viewState: CalendarViewState;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
 function registerListItemColorTagSwatchIcons(): void {
   for (const opt of LIST_ITEM_TAG_COLORS) {
     addIcon(opt.iconId, buildListItemTagColorSwatchSvg(opt.color));
@@ -62,7 +66,7 @@ function registerListItemColorTagSwatchIcons(): void {
 }
 
 export default class CalendarPlugin extends Plugin {
-  public options: ISettings;
+  public options: ISettings = { ...defaultSettings };
 
   private isLoadingData = false;
   private saveDataTimer: number | null = null;
@@ -144,7 +148,7 @@ export default class CalendarPlugin extends Plugin {
       name: "Open weekly note",
       checkCallback: (checking) => {
         if (checking) {
-          return !appHasPeriodicNotesPluginLoaded();
+          return !appHasPeriodicNotesPluginLoaded(this.app);
         }
 
         void this.withCalendarView((view) => {
@@ -204,7 +208,13 @@ export default class CalendarPlugin extends Plugin {
     }
 
     try {
-      await this.app.workspace.getRightLeaf(false).setViewState({
+      const leaf = this.app.workspace.getRightLeaf(false);
+      if (!leaf) {
+        console.warn("[Calendar] Failed to open calendar view: no right leaf available");
+        return;
+      }
+
+      await leaf.setViewState({
         type: VIEW_TYPE_CALENDAR,
       });
     } catch (err) {
@@ -254,37 +264,31 @@ export default class CalendarPlugin extends Plugin {
   }
 
   async loadOptions(): Promise<void> {
-    const raw = await this.loadData();
+    const raw = (await this.loadData()) as unknown;
 
-    const isV2 =
-      !!raw &&
-      typeof raw === "object" &&
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      typeof (raw as any).settings === "object";
+    const rawRecord = isRecord(raw) ? raw : null;
+    const settingsValue = rawRecord ? rawRecord["settings"] : undefined;
+
+    const isV2 = isRecord(settingsValue);
 
     // Legacy data was just the settings object.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const settingsData = (isV2 ? (raw as any).settings : raw) as
+    const settingsData = (isV2 ? settingsValue : raw) as
       | Partial<ISettings>
       | null
       | undefined;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cacheData = isV2 ? (raw as any).ollamaTitleCache : undefined;
+    const cacheData = isV2 ? rawRecord?.["ollamaTitleCache"] : undefined;
+    const customTitlesData = isV2 ? rawRecord?.["customListTitles"] : undefined;
+    const listItemColorTagsData = isV2 ? rawRecord?.["listItemColorTags"] : undefined;
+    const viewStateData = isV2 ? rawRecord?.["viewState"] : undefined;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const customTitlesData = isV2 ? (raw as any).customListTitles : undefined;
+    const settingsObj: Partial<ISettings> =
+      settingsData && typeof settingsData === "object" ? settingsData : {};
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const listItemColorTagsData = isV2 ? (raw as any).listItemColorTags : undefined;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const viewStateData = isV2 ? (raw as any).viewState : undefined;
-
-    const mergedSettings = {
+    const mergedSettings: ISettings = {
       ...defaultSettings,
-      ...(settingsData || {}),
-    } as ISettings;
+      ...settingsObj,
+    };
 
     settings.set(mergedSettings);
 

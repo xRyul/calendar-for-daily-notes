@@ -14,12 +14,8 @@ describe("ollama/client", () => {
   describe("normalizeOllamaBaseUrl", () => {
     it("defaults to localhost when empty", () => {
       expect(normalizeOllamaBaseUrl("")).toBe("http://127.0.0.1:11434");
-      expect(normalizeOllamaBaseUrl(null as unknown as string)).toBe(
-        "http://127.0.0.1:11434"
-      );
-      expect(normalizeOllamaBaseUrl(undefined as unknown as string)).toBe(
-        "http://127.0.0.1:11434"
-      );
+      expect(normalizeOllamaBaseUrl(null)).toBe("http://127.0.0.1:11434");
+      expect(normalizeOllamaBaseUrl(undefined)).toBe("http://127.0.0.1:11434");
     });
 
     it("strips trailing slashes and an optional /api suffix", () => {
@@ -36,7 +32,7 @@ describe("ollama/client", () => {
   });
 
   describe("createOllamaClient", () => {
-    const requestUrlMock = requestUrl as unknown as jest.Mock;
+    const requestUrlMock = requestUrl as jest.MockedFunction<typeof requestUrl>;
 
     beforeEach(() => {
       requestUrlMock.mockReset();
@@ -45,7 +41,10 @@ describe("ollama/client", () => {
     it("builds API URLs correctly (baseUrl can include /api)", async () => {
       requestUrlMock.mockResolvedValue({
         status: 200,
+        headers: {},
+        arrayBuffer: new ArrayBuffer(0),
         json: { version: "0.0.0" },
+        text: "{\"version\":\"0.0.0\"}",
       });
 
       const client = createOllamaClient({
@@ -57,7 +56,8 @@ describe("ollama/client", () => {
       expect(res).toEqual({ version: "0.0.0" });
 
       expect(requestUrlMock).toHaveBeenCalledTimes(1);
-      expect(requestUrlMock.mock.calls[0][0]).toMatchObject({
+      const firstCall = requestUrlMock.mock.calls[0]?.[0];
+      expect(firstCall).toMatchObject({
         url: "http://127.0.0.1:11434/api/version",
         method: "GET",
       });
@@ -66,8 +66,10 @@ describe("ollama/client", () => {
     it("throws a helpful error on HTTP failure", async () => {
       requestUrlMock.mockResolvedValue({
         status: 500,
-        text: "boom",
+        headers: {},
+        arrayBuffer: new ArrayBuffer(0),
         json: null,
+        text: "boom",
       });
 
       const client = createOllamaClient({

@@ -32,7 +32,7 @@ function touch(key: string, entry: CacheEntry): void {
 
 function prune(): void {
   while (cache.size > MAX_ENTRIES) {
-    const oldestKey = cache.keys().next().value as string | undefined;
+    const oldestKey = cache.keys().next().value;
     if (!oldestKey) {
       return;
     }

@@ -250,20 +250,19 @@
     <div class="calendar-list-days">
       {#if node.groups?.length}
         {#each node.groups as child (child.id)}
-            <svelte:self
-              node={child}
-              {openState}
-              {onToggle}
-              {showCounts}
-              {scrollParent}
-              {dayOpenState}
-              {virtualize}
-              {virtualMinItems}
-              {virtualOverscan}
-            >
-            <svelte:fragment let:items>
-              <slot {items} />
-            </svelte:fragment>
+          <svelte:self
+            node={child}
+            {openState}
+            {onToggle}
+            {showCounts}
+            {scrollParent}
+            {dayOpenState}
+            {virtualize}
+            {virtualMinItems}
+            {virtualOverscan}
+            let:items
+          >
+            <slot {items} />
           </svelte:self>
         {/each}
       {:else}

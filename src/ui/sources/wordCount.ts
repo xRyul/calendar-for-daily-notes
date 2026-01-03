@@ -30,9 +30,10 @@ export async function getDotsForDailyNote(
   }
   const numSolidDots = await getWordLengthAsDots(dailyNote);
 
-  const dots = [];
+  const dots: IDot[] = [];
   for (let i = 0; i < numSolidDots; i++) {
     dots.push({
+      className: "calendar-wordcount-dot",
       color: "default",
       isFilled: true,
     });

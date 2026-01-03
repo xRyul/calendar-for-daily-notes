@@ -10,14 +10,14 @@ import { writable } from "svelte/store";
 import type { CustomListTitles } from "src/customListTitles";
 import type { ListItemColorTags } from "src/listItemColorTags";
 import type { OllamaTitleCache } from "src/ollama/cache";
-import { defaultSettings, ISettings } from "src/settings";
+import { defaultSettings, type ISettings } from "src/settings";
 
 function createDailyNotesStore() {
   let hasError = false;
   let initialized = false;
   let pathSet = new Set<string>();
 
-  const store = writable<Record<string, TFile>>(null);
+  const store = writable<Record<string, TFile>>({});
   return {
     reindex: () => {
       try {
@@ -32,7 +32,7 @@ function createDailyNotesStore() {
       } catch (err) {
         if (!hasError) {
           // Avoid error being shown multiple times
-          console.log("[Calendar] Failed to find daily notes folder", err);
+          console.warn("[Calendar] Failed to find daily notes folder", err);
         }
         store.set({});
         pathSet = new Set();
@@ -54,7 +54,7 @@ function createWeeklyNotesStore() {
   let initialized = false;
   let pathSet = new Set<string>();
 
-  const store = writable<Record<string, TFile>>(null);
+  const store = writable<Record<string, TFile>>({});
   return {
     reindex: () => {
       try {
@@ -69,7 +69,7 @@ function createWeeklyNotesStore() {
       } catch (err) {
         if (!hasError) {
           // Avoid error being shown multiple times
-          console.log("[Calendar] Failed to find weekly notes folder", err);
+          console.warn("[Calendar] Failed to find weekly notes folder", err);
         }
         store.set({});
         pathSet = new Set();
@@ -95,7 +95,7 @@ export const customListTitles = writable<CustomListTitles>({});
 export const listItemColorTags = writable<ListItemColorTags>({});
 
 function createSelectedFileStore() {
-  const store = writable<string>(null);
+  const store = writable<string | null>(null);
 
   return {
     setFile: (file: TFile | null) => {
@@ -144,7 +144,7 @@ function createSelectedFileStore() {
 }
 
 function createActiveFilePathStore() {
-  const store = writable<string>(null);
+  const store = writable<string | null>(null);
 
   return {
     setFile: (file: TFile | null) => {

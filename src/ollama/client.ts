@@ -63,7 +63,7 @@ function withTimeout<T>(
   ]);
 }
 
-export function normalizeOllamaBaseUrl(input: string): string {
+export function normalizeOllamaBaseUrl(input: string | null | undefined): string {
   let url = (input ?? "").trim();
   if (!url) {
     return "http://127.0.0.1:11434";
@@ -197,7 +197,7 @@ export function safeParseJson<T = unknown>(text: string): T | null {
 
   try {
     return JSON.parse(text) as T;
-  } catch (_err) {
+  } catch {
     // Try to recover by extracting the first JSON object.
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) {
@@ -205,7 +205,7 @@ export function safeParseJson<T = unknown>(text: string): T | null {
     }
     try {
       return JSON.parse(match[0]) as T;
-    } catch (_err2) {
+    } catch {
       return null;
     }
   }

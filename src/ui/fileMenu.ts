@@ -1,4 +1,5 @@
-import { App, Menu, Point, TFile } from "obsidian";
+import { Menu } from "obsidian";
+import type { App, Point, TFile } from "obsidian";
 
 export function showFileMenu(app: App, file: TFile, position: Point): void {
   const fileMenu = new Menu();
@@ -7,8 +8,7 @@ export function showFileMenu(app: App, file: TFile, position: Point): void {
       .setTitle("Delete")
       .setIcon("trash")
       .onClick(() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (<any>app).fileManager.promptForFileDeletion(file);
+        void app.fileManager.promptForDeletion(file);
       })
   );
 
