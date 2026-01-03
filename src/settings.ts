@@ -111,12 +111,12 @@ export class CalendarSettingsTab extends PluginSettingTab {
     if (!appHasDailyNotesPluginLoaded()) {
       this.containerEl.createDiv("settings-banner", (banner) => {
         banner.createEl("h3", {
-          text: "⚠️ Daily Notes plugin not enabled",
+          text: "⚠️ Daily notes plugin not enabled",
         });
         banner.createEl("p", {
           cls: "setting-item-description",
           text:
-            "The calendar is best used in conjunction with either the Daily Notes plugin or the Periodic Notes plugin (available in the Community Plugins catalog).",
+            "The calendar is best used in conjunction with either the Daily notes plugin or the Periodic Notes plugin (available in the Community plugins catalog).",
         });
       });
     }

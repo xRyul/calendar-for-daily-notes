@@ -63,7 +63,6 @@ function registerListItemColorTagSwatchIcons(): void {
 
 export default class CalendarPlugin extends Plugin {
   public options: ISettings;
-  private view: CalendarView;
 
   private isLoadingData = false;
   private saveDataTimer: number | null = null;
@@ -125,10 +124,7 @@ export default class CalendarPlugin extends Plugin {
       })
     );
 
-    this.registerView(
-      VIEW_TYPE_CALENDAR,
-      (leaf: WorkspaceLeaf) => (this.view = new CalendarView(leaf))
-    );
+    this.registerView(VIEW_TYPE_CALENDAR, (leaf: WorkspaceLeaf) => new CalendarView(leaf));
 
     this.addCommand({
       id: "show-calendar-view",
@@ -139,7 +135,7 @@ export default class CalendarPlugin extends Plugin {
             this.app.workspace.getLeavesOfType(VIEW_TYPE_CALENDAR).length === 0
           );
         }
-        this.initLeaf();
+        void this.initLeaf();
       },
     });
 
@@ -150,14 +146,20 @@ export default class CalendarPlugin extends Plugin {
         if (checking) {
           return !appHasPeriodicNotesPluginLoaded();
         }
-        this.view.openOrCreateWeeklyNote(window.moment(), false);
+
+        void this.withCalendarView((view) => {
+          view.openOrCreateWeeklyNote(window.moment(), false);
+        });
       },
     });
 
     this.addCommand({
       id: "reveal-active-note",
       name: "Reveal active note",
-      callback: () => this.view.revealActiveNote(),
+      callback: () =>
+        void this.withCalendarView((view) => {
+          view.revealActiveNote();
+        }),
     });
 
     await this.loadOptions();
@@ -165,23 +167,49 @@ export default class CalendarPlugin extends Plugin {
     this.addSettingTab(new CalendarSettingsTab(this.app, this));
 
     if (this.app.workspace.layoutReady) {
-      this.initLeaf();
+      void this.initLeaf();
     } else {
-      this.app.workspace.onLayoutReady(this.initLeaf.bind(this));
+      this.app.workspace.onLayoutReady(() => void this.initLeaf());
     }
   }
 
-  initLeaf(): void {
+  private getCalendarView(): CalendarView | null {
+    const leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_CALENDAR)[0];
+    const view = leaf?.view;
+
+    return view instanceof CalendarView ? view : null;
+  }
+
+  private async withCalendarView(
+    fn: (view: CalendarView) => void | Promise<void>
+  ): Promise<void> {
+    await this.initLeaf();
+
+    const view = this.getCalendarView();
+    if (!view) {
+      console.warn("[Calendar] Calendar view is not available");
+      return;
+    }
+
+    try {
+      await fn(view);
+    } catch (err) {
+      console.error("[Calendar] Failed to run calendar command", err);
+    }
+  }
+
+  private async initLeaf(): Promise<void> {
     if (this.app.workspace.getLeavesOfType(VIEW_TYPE_CALENDAR).length) {
       return;
     }
 
-    void this.app.workspace
-      .getRightLeaf(false)
-      .setViewState({
+    try {
+      await this.app.workspace.getRightLeaf(false).setViewState({
         type: VIEW_TYPE_CALENDAR,
-      })
-      .catch((err) => console.error("[Calendar] Failed to open calendar view", err));
+      });
+    } catch (err) {
+      console.error("[Calendar] Failed to open calendar view", err);
+    }
   }
 
   private scheduleSaveData(): void {
