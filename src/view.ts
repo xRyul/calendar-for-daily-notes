@@ -265,7 +265,7 @@ export default class CalendarView extends ItemView {
     }
   }
 
-  async onOpen(): Promise<void> {
+  protected onOpen(): Promise<void> {
     // Integration point: external plugins can listen for `calendar:open`
     // to feed in additional sources.
     const sources: ICalendarSource[] = [
@@ -296,6 +296,8 @@ export default class CalendarView extends ItemView {
         sources: instrumentedSources,
       },
     });
+
+    return Promise.resolve();
   }
 
   onHoverDay(date: Moment, targetEl: EventTarget): void {
@@ -361,9 +363,9 @@ export default class CalendarView extends ItemView {
     this.scheduleCalendarTick();
   }
 
-  private async onFileDeleted(file: TAbstractFile): Promise<void> {
+  private onFileDeleted(file: TAbstractFile): Promise<void> {
     if (!(file instanceof TFile)) {
-      return;
+      return Promise.resolve();
     }
 
     if (getDateFromFile(file, "day")) {
@@ -376,11 +378,13 @@ export default class CalendarView extends ItemView {
       this.updateActiveFile();
       this.scheduleCalendarTick();
     }
+
+    return Promise.resolve();
   }
 
-  private async onFileModified(file: TAbstractFile): Promise<void> {
+  private onFileModified(file: TAbstractFile): Promise<void> {
     if (!(file instanceof TFile)) {
-      return;
+      return Promise.resolve();
     }
 
     const dailyDate = getDateFromFile(file, "day");
@@ -395,6 +399,8 @@ export default class CalendarView extends ItemView {
     if (dailyDate) {
       this.scheduleListRefresh();
     }
+
+    return Promise.resolve();
   }
 
   private onFileCreated(file: TAbstractFile): void {

@@ -1,6 +1,5 @@
 import type { App } from "obsidian";
 
-/* eslint-disable */
 const mockApp = {
   vault: {
     adapter: {
@@ -20,7 +19,7 @@ const mockApp = {
       rename: () => Promise.resolve(),
       copy: () => Promise.resolve(),
     },
-    configDir: ".obsidian",
+    configDir: "test-config",
     getName: () => "",
     getAbstractFileByPath: () => null,
     getRoot: () => ({
@@ -31,7 +30,7 @@ const mockApp = {
       path: "",
       vault: null,
     }),
-    create: jest.fn(),
+    create: () => Promise.resolve(null),
     createFolder: () => Promise.resolve(null),
     createBinary: () => Promise.resolve(null),
     read: () => Promise.resolve(""),
@@ -67,7 +66,6 @@ const mockApp = {
     resolvedLinks: null,
     unresolvedLinks: null,
   },
-  // @ts-ignore
   internalPlugins: {
     plugins: {
       "daily-notes": {
@@ -82,6 +80,5 @@ const mockApp = {
     },
   },
 } as unknown as App;
-/* eslint-enable */
 
 export default mockApp;

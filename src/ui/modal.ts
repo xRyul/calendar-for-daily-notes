@@ -3,8 +3,7 @@ import type { App } from "obsidian";
 
 interface IConfirmationDialogParams {
   cta: string;
-  // eslint-disable-next-line
-  onAccept: (...args: any[]) => Promise<void>;
+  onAccept: (event: MouseEvent) => Promise<void>;
   text: string;
   title: string;
 }
