@@ -712,7 +712,7 @@
   padding: 4px 6px;
   text-align: left;
   cursor: pointer;
-  color: var(--text-muted);
+  color: var(--text-normal);
   border-radius: 6px;
   font-weight: 400;
 
@@ -924,10 +924,9 @@
 /* removed pseudo chevron: using inline svg now */
 /* old day pseudo chevron removed */
 
-/* Dim the day toggle when there are no created notes or attachments */
+/* Hide the day chevron when there are no created notes or attachments */
 .calendar-view .calendar-list-day-details.is-empty > summary .calendar-chevron {
-  color: var(--text-faint);
-  opacity: 0.6;
+  visibility: hidden;
 }
 
 /* removed */
