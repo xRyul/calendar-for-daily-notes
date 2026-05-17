@@ -4,8 +4,8 @@ const path = require("path");
 const REPO_ROOT = path.resolve(__dirname, "..");
 
 const DEFAULT_VAULT_PLUGINS_DIR = process.platform === "win32"
-  ? "C:\\Users\\daniel\\Developer\\Obsidian Plugins\\Plugin-Testing-Vault\\.obsidian\\plugins"
-  : "/mnt/c/Users/daniel/Developer/Obsidian Plugins/Plugin-Testing-Vault/.obsidian/plugins";
+  ? "D:\\plugin-testing-vault\\.obsidian\\plugins"
+  : "/mnt/d/plugin-testing-vault/.obsidian/plugins";
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
