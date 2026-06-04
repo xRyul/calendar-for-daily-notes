@@ -73,10 +73,27 @@
   }
 
   // Keep the legacy component in sync with wrapper props.
-  // NOTE: Don't wrap `buildProps()` in another function — we want the compiler to track
-  // the individual reactive dependencies (showWeekNums, displayedMonth, etc.).
+  // Svelte only tracks dependencies referenced directly in a reactive block; variables
+  // read inside buildProps() are not enough. Build the props inline so selectedId,
+  // today, displayedMonth, handlers, settings, and sources all trigger `$set()`.
   $: if (instance) {
-    instance.$set(buildProps());
+    const safeToday = today ?? window.moment();
+    const safeDisplayedMonth = displayedMonth ?? safeToday;
+
+    instance.$set({
+      showWeekNums,
+      localeData,
+      onHoverDay,
+      onHoverWeek,
+      onClickDay,
+      onClickWeek,
+      onContextMenuDay,
+      onContextMenuWeek,
+      selectedId,
+      sources,
+      today: safeToday,
+      displayedMonth: safeDisplayedMonth,
+    });
   }
 
   onMount(() => {

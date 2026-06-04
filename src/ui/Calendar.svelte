@@ -2742,8 +2742,10 @@
                     <button
                       class="calendar-list-day"
                       class:is-active={item.dateUID === $activeFile}
+                      class:is-today={item.date.isSame(today, "day")}
                       class:is-missing-daily={!item.dailyNoteExists}
                       type="button"
+                      aria-current={item.date.isSame(today, "day") ? "date" : undefined}
                       on:click={(e) => onClickListDay(item.date, e)}
                     >
                       <span class="calendar-list-day-label">

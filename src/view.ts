@@ -297,6 +297,11 @@ export default class CalendarView extends ItemView {
       },
     });
 
+    // When the Calendar view is opened or reloaded while a daily note is already active,
+    // Obsidian does not necessarily emit another file-open event. Seed the selected day
+    // immediately so the calendar differentiates the active note from today on first render.
+    this.updateActiveFile();
+
     return Promise.resolve();
   }
 
@@ -420,18 +425,22 @@ export default class CalendarView extends ItemView {
     }
   }
 
-  public onFileOpen(_file: TFile | null): void {
+  public onFileOpen(file: TFile | null): void {
     if (this.app.workspace.layoutReady) {
-      this.updateActiveFile();
+      this.updateActiveFile(file);
     }
   }
 
-  private updateActiveFile(): void {
-    const view = this.app.workspace.getActiveViewOfType(FileView);
-    const file = view?.file ?? null;
+  private updateActiveFile(file: TFile | null | undefined = undefined): void {
+    const resolvedFile =
+      file !== undefined
+        ? file
+        : (this.app.workspace.getActiveViewOfType(FileView)?.file ??
+          this.app.workspace.getActiveFile() ??
+          null);
 
-    activeFile.setFile(file);
-    activeFilePath.setFile(file);
+    activeFile.setFile(resolvedFile);
+    activeFilePath.setFile(resolvedFile);
   }
 
   private scheduleCalendarTick(): void {
