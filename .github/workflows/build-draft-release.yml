@@ -13,21 +13,33 @@ on:
     tags:
       - '*.*.*'
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build and attest'
+        required: true
+        type: string
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 concurrency:
-  group: draft-release-${{ github.ref_name }}
+  group: draft-release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout release tag
+        uses: actions/checkout@v4
         with:
+          ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -41,9 +53,14 @@ jobs:
 
       - name: Derive release version from tag
         run: |
-          TAG="${{ github.ref_name }}"
+          set -euo pipefail
+          TAG="${RELEASE_TAG}"
+          if [[ ! "$TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Release tag must be in X.Y.Z or vX.Y.Z format: $TAG"
+            exit 1
+          fi
           VERSION="${TAG#v}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Update manifest version for release
         run: |
@@ -94,16 +111,21 @@ jobs:
           fi
           echo "✅ Manifest version verified: $VERSION"
 
-      - name: Create draft release with assets
-        uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@v2
         with:
-          draft: true
-          name: ${{ env.VERSION }}
-          tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
-          files: |
+          subject-path: |
             main.js
             manifest.json
             styles.css
+
+      - name: Create or update GitHub release with assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" main.js manifest.json styles.css --clobber
+          else
+            gh release create "$RELEASE_TAG" main.js manifest.json styles.css --draft --title "$VERSION" --generate-notes
+          fi

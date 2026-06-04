@@ -3,9 +3,19 @@ const path = require("path");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 
-const DEFAULT_VAULT_PLUGINS_DIR = process.platform === "win32"
-  ? "D:\\plugin-testing-vault\\.obsidian\\plugins"
-  : "/mnt/d/plugin-testing-vault/.obsidian/plugins";
+function getDefaultVaultPluginsDir() {
+  const candidates = [
+    path.resolve(__dirname, '..', '..', 'plugin-testing-vault', '.obsidian', 'plugins'),
+    path.resolve(__dirname, '..', '..', 'Plugin-Testing-Vault', '.obsidian', 'plugins'),
+    process.platform === 'win32'
+      ? 'D:\\plugin-testing-vault\\.obsidian\\plugins'
+      : '/mnt/d/plugin-testing-vault/.obsidian/plugins',
+  ];
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[candidates.length - 1];
+}
+
+const DEFAULT_VAULT_PLUGINS_DIR = getDefaultVaultPluginsDir();
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
