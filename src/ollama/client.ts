@@ -53,12 +53,12 @@ function withTimeout<T>(
   return Promise.race([
     promise,
     new Promise<T>((_resolve, reject) => {
-      const timer = setTimeout(() => {
+      const timer = activeWindow.setTimeout(() => {
         reject(new Error(`${label} timed out after ${timeoutMs}ms`));
       }, timeoutMs);
 
       // If the main promise resolves/rejects first, clear the timer.
-      void promise.finally(() => clearTimeout(timer)).catch(() => undefined);
+      void promise.finally(() => activeWindow.clearTimeout(timer)).catch(() => undefined);
     }),
   ]);
 }

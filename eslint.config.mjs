@@ -1,7 +1,7 @@
 import tsParser from "@typescript-eslint/parser";
 import tseslint from "@typescript-eslint/eslint-plugin";
 import { defineConfig } from "eslint/config";
-import eslintComments from "eslint-plugin-eslint-comments";
+import eslintComments from "@eslint-community/eslint-plugin-eslint-comments";
 import obsidianmd from "eslint-plugin-obsidianmd";
 import globals from "globals";
 
@@ -27,6 +27,7 @@ export default defineConfig([
       },
       globals: {
         ...globals.browser,
+        activeWindow: "readonly",
       },
     },
     plugins: {

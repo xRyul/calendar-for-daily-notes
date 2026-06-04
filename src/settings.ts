@@ -137,6 +137,10 @@ export class CalendarSettingsTab extends PluginSettingTab {
   }
 
   display(): void {
+    this.renderSettings();
+  }
+
+  private renderSettings(): void {
     this.containerEl.empty();
 
     if (!appHasDailyNotesPluginLoaded()) {
@@ -180,7 +184,6 @@ export class CalendarSettingsTab extends PluginSettingTab {
 
     new Setting(this.containerEl).setName("Advanced").setHeading();
     this.addLocaleOverrideSetting();
-
   }
 
   addDotThresholdSetting(): void {
@@ -286,7 +289,7 @@ export class CalendarSettingsTab extends PluginSettingTab {
             .catch((err) =>
               console.error("[Calendar] Failed to update show week number setting", err)
             );
-          this.display(); // show/hide weekly settings
+          this.renderSettings(); // show/hide weekly settings
         });
       });
   }

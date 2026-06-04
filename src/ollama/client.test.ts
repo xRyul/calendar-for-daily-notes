@@ -35,6 +35,8 @@ describe("ollama/client", () => {
     const requestUrlMock = requestUrl as jest.MockedFunction<typeof requestUrl>;
 
     beforeEach(() => {
+      (globalThis as unknown as { activeWindow: typeof globalThis }).activeWindow =
+        globalThis;
       requestUrlMock.mockReset();
     });
 
