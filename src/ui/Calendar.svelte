@@ -129,9 +129,20 @@
     document.body.appendChild(node);
 
     return {
-      // IMPORTANT: do not remove the node here. Svelte will detach it during teardown.
-      destroy() {},
+      destroy() {
+        // Svelte does not reliably detach nodes that an action has moved to <body>.
+        // Remove the portaled element explicitly so closing/reopening the menu can't leave stale overlays.
+        node.remove();
+      },
     };
+  }
+
+  function removeStaleOllamaMenus(): void {
+    document.querySelectorAll(".calendar-ollama-menu").forEach((node) => {
+      if (node !== ollamaMenuEl) {
+        node.remove();
+      }
+    });
   }
 
   /**
@@ -481,9 +492,14 @@
     event.preventDefault();
     event.stopPropagation();
 
-    showOllamaMenu = !showOllamaMenu;
+    const shouldShowMenu = !showOllamaMenu;
+    if (shouldShowMenu) {
+      removeStaleOllamaMenus();
+    }
 
-    if (showOllamaMenu) {
+    showOllamaMenu = shouldShowMenu;
+
+    if (shouldShowMenu) {
       // Seed a reasonable initial position to avoid a flash at (0,0) before we can measure.
       if (ollamaSettingsButtonEl) {
         const rect = ollamaSettingsButtonEl.getBoundingClientRect();
@@ -2114,6 +2130,7 @@
   }
 
   onMount(() => {
+    removeStaleOllamaMenus();
     const onMouseDownCapture = (event: MouseEvent) => {
       if (!showOllamaMenu) {
         return;
@@ -2251,7 +2268,6 @@
               use:portalToBody
               style={`top: ${ollamaMenuTop}px; left: ${ollamaMenuLeft}px; max-height: ${ollamaMenuMaxHeight}px;`}
               on:scroll={() => hideTooltip()}
-              transition:safeSlide={{ duration: 120 }}
             >
               <div class="calendar-ollama-menu-row calendar-ollama-menu-row--top">
                 <div class="calendar-ollama-menu-title">
