@@ -67,7 +67,7 @@
   } from "./stores";
   import { getWordCount as getWordCountFromFile } from "./noteMetrics";
 
-  // Initialize immediately so downstream code (bindings, localeData, heartbeat) never sees `undefined`.
+  // Initialize immediately so downstream code (bindings, localeData, day rollover) never sees `undefined`.
   let today: Moment = window.moment();
 
   $: today = getToday($settings);
@@ -1894,26 +1894,53 @@
     return window.moment();
   }
 
-  // 1 minute heartbeat to keep `today` reflecting the current day
-  let heartbeat = setInterval(() => {
+  const TODAY_ROLLOVER_BUFFER_MS = 1000;
+  let todayRolloverTimer: number | null = null;
+
+  type MomentComparable = Pick<Moment, "isSame">;
+
+  function canCompareMoment(value: unknown): value is MomentComparable {
+    return !!value && typeof (value as { isSame?: unknown }).isSame === "function";
+  }
+
+  function getMsUntilNextLocalDay(now = new Date()): number {
+    const nextDay = new Date(now.getTime());
+    nextDay.setDate(nextDay.getDate() + 1);
+    nextDay.setHours(0, 0, 1, 0);
+
+    return Math.max(TODAY_ROLLOVER_BUFFER_MS, nextDay.getTime() - now.getTime());
+  }
+
+  function refreshTodayAfterDayRollover(): void {
+    const previousToday = today;
     tick();
 
-    // Extremely defensive: avoid transient undefined/invalid values during mount/unmount.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const dm: any = displayedMonth;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const t: any = today;
-    if (!dm || !t || typeof dm.isSame !== "function" || typeof t.isSame !== "function") {
-      return;
+    // If the calendar was following today's date, move it across month boundaries at midnight.
+    if (
+      canCompareMoment(displayedMonth) &&
+      canCompareMoment(previousToday) &&
+      displayedMonth.isSame(previousToday, "day")
+    ) {
+      displayedMonth = today;
     }
+  }
 
-    const isViewingCurrentMonth = dm.isSame(t, "day");
-    if (isViewingCurrentMonth) {
-      // if it's midnight on the last day of the month, this will
-      // update the display to show the new month.
-      displayedMonth = t;
+  function clearTodayRolloverTimer(): void {
+    if (todayRolloverTimer !== null) {
+      window.clearTimeout(todayRolloverTimer);
+      todayRolloverTimer = null;
     }
-  }, 1000 * 60);
+  }
+
+  function scheduleTodayRollover(): void {
+    clearTodayRolloverTimer();
+
+    todayRolloverTimer = window.setTimeout(() => {
+      todayRolloverTimer = null;
+      refreshTodayAfterDayRollover();
+      scheduleTodayRollover();
+    }, getMsUntilNextLocalDay());
+  }
 
   // Persist the displayed month after hydration.
   $: if (viewStateHydrated && $settings.rememberViewState) {
@@ -2011,6 +2038,8 @@
     } finally {
       viewStateHydrated = true;
     }
+
+    scheduleTodayRollover();
 
     const schedule = () => {
       // CalendarBase mounts inside this component; wait a frame so its DOM is ready.
@@ -2121,7 +2150,7 @@
   });
 
   onDestroy(() => {
-    clearInterval(heartbeat);
+    clearTodayRolloverTimer();
     if (listComputeTimer !== null) {
       window.clearTimeout(listComputeTimer);
     }
