@@ -1,7 +1,6 @@
 <svelte:options immutable />
 
 <script lang="ts">
-  import { configureGlobalMomentLocale } from "obsidian-calendar-ui";
   import LegacyCalendarBase from "./LegacyCalendarBase.svelte";
   import type { ICalendarSource } from "obsidian-calendar-ui";
   import type { Moment } from "moment";
@@ -13,6 +12,7 @@
 
   import ListGroup from "./ListGroup.svelte";
   import { LIST_ITEM_TAG_COLORS } from "./listItemColorTagMenu";
+  import { configureCalendarMomentLocale } from "./locale";
 
   import {
     buildListGroups,
@@ -941,11 +941,8 @@
   }
 
   function isPerfDebugEnabled(): boolean {
-    try {
-      return window.localStorage?.getItem("calendar-debug-perf") === "1";
-    } catch {
-      return false;
-    }
+    return (window as typeof window & { calendarDebugPerf?: boolean })
+      .calendarDebugPerf === true;
   }
 
   function perfNow(): number {
@@ -1904,7 +1901,7 @@
   }
 
   function getToday(settings: ISettings) {
-    configureGlobalMomentLocale(settings.localeOverride, settings.weekStart);
+    configureCalendarMomentLocale(settings.localeOverride, settings.weekStart);
     dailyNotes.reindex();
     weeklyNotes.reindex();
     return window.moment();

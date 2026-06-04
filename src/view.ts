@@ -44,11 +44,8 @@ import {
 type Moment = moment.Moment;
 
 function isPerfDebugEnabled(): boolean {
-  try {
-    return window.localStorage?.getItem("calendar-debug-perf") === "1";
-  } catch {
-    return false;
-  }
+  return (window as typeof window & { calendarDebugPerf?: boolean })
+    .calendarDebugPerf === true;
 }
 
 function perfNow(): number {
