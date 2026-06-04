@@ -2202,29 +2202,6 @@
         class:is-positioned={listTogglePositioned}
         bind:this={listControlsEl}
       >
-        <button
-          class="calendar-list-toggle"
-          class:is-active={showList}
-          type="button"
-          aria-label={showList ? "Hide list" : "Show list"}
-          aria-pressed={showList}
-          bind:this={listToggleButtonEl}
-          on:click={toggleList}
-        >
-          <svg
-            focusable="false"
-            role="img"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path
-              fill="currentColor"
-              d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z"
-            />
-          </svg>
-        </button>
-
         {#if showList}
           <button
             class="calendar-ollama-settings-toggle"
@@ -2259,8 +2236,32 @@
               ></span>
             {/if}
           </button>
+        {/if}
 
-          {#if showOllamaMenu}
+        <button
+          class="calendar-list-toggle"
+          class:is-active={showList}
+          type="button"
+          aria-label={showList ? "Hide list" : "Show list"}
+          aria-pressed={showList}
+          bind:this={listToggleButtonEl}
+          on:click={toggleList}
+        >
+          <svg
+            focusable="false"
+            role="img"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              fill="currentColor"
+              d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z"
+            />
+          </svg>
+        </button>
+
+        {#if showList && showOllamaMenu}
             <div
               class="calendar-ollama-menu"
               role="menu"
@@ -2664,7 +2665,6 @@
               </div>
             {/if}
           {/if}
-        {/if}
       </div>
     </div>
   </div>
