@@ -35,8 +35,6 @@ describe("ollama/client", () => {
     const requestUrlMock = requestUrl as jest.MockedFunction<typeof requestUrl>;
 
     beforeEach(() => {
-      (globalThis as unknown as { activeWindow: typeof globalThis }).activeWindow =
-        globalThis;
       requestUrlMock.mockReset();
     });
 
@@ -51,7 +49,6 @@ describe("ollama/client", () => {
 
       const client = createOllamaClient({
         baseUrl: "http://127.0.0.1:11434/api",
-        timeoutMs: 1000,
       });
 
       const res = await client.getVersion();
@@ -76,7 +73,6 @@ describe("ollama/client", () => {
 
       const client = createOllamaClient({
         baseUrl: "http://127.0.0.1:11434",
-        timeoutMs: 1000,
       });
 
       await expect(client.getVersion()).rejects.toThrow(
