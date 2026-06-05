@@ -3,6 +3,7 @@
   import { Calendar as LegacyCalendar } from "obsidian-calendar-ui";
   import type { ICalendarSource } from "obsidian-calendar-ui";
   import { onMount } from "svelte";
+  import { bindLegacyExport } from "./legacySvelteBinding";
 
   // Settings
   export let showWeekNums = false;
@@ -108,15 +109,11 @@
       props: initialProps,
     });
 
-    // Preserve `bind:displayedMonth` by wiring the legacy component binding callback
-    // to this wrapper's exported `displayedMonth` prop.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const maybeBound = (instance as any)?.$$?.bound;
-    if (maybeBound) {
-      maybeBound.displayedMonth = (value: Moment) => {
-        displayedMonth = value;
-      };
-    }
+    // Preserve `bind:displayedMonth` by wiring the legacy Svelte 3 component's
+    // compiled prop-index callback to this wrapper's exported prop.
+    bindLegacyExport<Moment>(instance, "displayedMonth", (value) => {
+      displayedMonth = value;
+    });
 
     // If the parent didn't provide a month yet, initialize it so bindings are stable.
     if (!displayedMonth) {

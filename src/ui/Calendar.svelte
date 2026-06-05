@@ -1697,6 +1697,9 @@
     event.preventDefault();
     event.stopPropagation();
 
+    // Keep the calendar grid aligned with the day selected from the list.
+    displayedMonth = date.clone().startOf("month");
+
     const isMetaPressed = event.metaKey || event.ctrlKey;
     onClickDay(date, isMetaPressed);
   }
